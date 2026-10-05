@@ -141,7 +141,7 @@ func TestCheckResponsesWSModelAccessMatchesHTTPTokenLimits(t *testing.T) {
 			}
 			require.NotNil(t, apiErr)
 			assert.Equal(t, tc.status, apiErr.StatusCode)
-			assert.False(t, service.ShouldRetryRelayError(c, apiErr, 2))
+			assert.False(t, service.ShouldRetryRelayError(c, apiErr, 2, nil))
 		})
 	}
 }
@@ -321,7 +321,7 @@ func TestSelectResponsesWSChannelHonorsStrictSessionBinding(t *testing.T) {
 	require.NotNil(t, apiErr)
 	assert.Nil(t, channel)
 	assert.Equal(t, http.StatusServiceUnavailable, apiErr.StatusCode)
-	assert.False(t, service.ShouldRetryRelayError(strict, apiErr, 2))
+	assert.False(t, service.ShouldRetryRelayError(strict, apiErr, 2, nil))
 	_, found = service.GetPreferredChannelByAffinity(seed, "ws-model", "default")
 	assert.False(t, found, "an unusable binding is cleared unless keep_on_channel_disabled is set")
 
