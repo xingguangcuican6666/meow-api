@@ -222,8 +222,13 @@ func TestPerformanceAggregationAndFlush(t *testing.T) {
 			assert.Equal(t, 99.01, summary.Models[0].RecentSuccessSeries[0].SuccessRate)
 			encoded, err := common.Marshal(summary)
 			require.NoError(t, err)
+			// request_count is window-volume bookkeeping and stays out of the API,
+			// but the success/failure counters and the live first-byte latency are
+			// a separate feature that the model cards read from this same endpoint
+			// (web/src/features/pricing/components/model-perf-badge.tsx). Keep them.
 			assert.NotContains(t, string(encoded), "request_count")
-			assert.NotContains(t, string(encoded), "success_count")
+			assert.Contains(t, string(encoded), "success_count")
+			assert.Contains(t, string(encoded), "last_ttft_ms")
 
 			flushCompletedBuckets()
 			flushCompletedBuckets()
