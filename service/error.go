@@ -401,3 +401,23 @@ func TaskErrorFromAPIError(apiErr *types.NewAPIError) *taskdto.TaskError {
 		Error:      apiErr.Err,
 	}
 }
+
+// SanitizeUpstreamOpenAIError converts an upstream-provided OpenAIError payload
+// into a client-safe one. The machine-readable type and code are preserved so
+// clients can still branch on them, while the human-readable message is
+// replaced by the standardized phrasing and upstream-only fields (Metadata,
+// Param) are dropped. Used by transports that relay upstream error frames
+// directly, such as the Realtime WebSocket proxy, which have no NewAPIError to
+// standardize at the exit. Administrators and root keep seeing the verbatim
+// error. statusCode is the status reported by the upstream frame, or 0 when the
+// transport has no meaningful status.
+func SanitizeUpstreamOpenAIError(c *gin.Context, upstream types.OpenAIError, statusCode int) types.OpenAIError {
+	if !ShouldSanitizeUpstreamForClient(c) {
+		return upstream
+	}
+	return types.OpenAIError{
+		Message: StandardUpstreamMessage(c, statusCode),
+		Type:    upstream.Type,
+		Code:    upstream.Code,
+	}
+}

@@ -223,7 +223,15 @@ func (e *NewAPIError) ToOpenAIError() OpenAIError {
 	switch e.errorType {
 	case ErrorTypeOpenAIError:
 		if openAIError, ok := e.RelayError.(OpenAIError); ok {
-			result = openAIError
+			// Only copy the safe fields; never expose upstream Metadata or Param
+			// to the client, as they may contain provider names, raw error details,
+			// or internal identifiers. Type and Code are preserved for client-side
+			// branching.
+			result = OpenAIError{
+				Message: e.Error(),
+				Type:    openAIError.Type,
+				Code:    openAIError.Code,
+			}
 		}
 	case ErrorTypeClaudeError:
 		if claudeError, ok := e.RelayError.(ClaudeError); ok {
@@ -266,7 +274,12 @@ func (e *NewAPIError) ToClaudeError() ClaudeError {
 		}
 	case ErrorTypeClaudeError:
 		if claudeError, ok := e.RelayError.(ClaudeError); ok {
-			result = claudeError
+			// Copy field by field so any future upstream-only field added to
+			// ClaudeError is not forwarded to the client by default.
+			result = ClaudeError{
+				Message: e.Error(),
+				Type:    claudeError.Type,
+			}
 		}
 	default:
 		result = ClaudeError{
@@ -393,12 +406,13 @@ func WithOpenAIError(openAIError OpenAIError, statusCode int, ops ...NewAPIError
 		Err:        errors.New(openAIError.Message),
 		errorCode:  ErrorCode(code),
 	}
-	// OpenRouter
+	// Preserve Metadata in the RelayError for internal use (logging, debugging),
+	// but do NOT concatenate it into Err.Error() — that would leak sensitive
+	// upstream details into clientMessage-less error paths. ToOpenAIError()
+	// strips Metadata unconditionally before returning to clients.
 	if len(openAIError.Metadata) > 0 {
-		openAIError.Message = fmt.Sprintf("%s (%s)", openAIError.Message, openAIError.Metadata)
 		e.Metadata = openAIError.Metadata
 		e.RelayError = openAIError
-		e.Err = errors.New(openAIError.Message)
 	}
 	for _, op := range ops {
 		op(e)

@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
@@ -82,4 +83,72 @@ func TestClientMessageOverridesClientProjectionsOnly(t *testing.T) {
 	// Deep-preserved NewAPIError keeps its pinned client message.
 	wrapped := NewError(err, ErrorCodeBadResponse)
 	assert.Equal(t, "upstream request failed", wrapped.ToOpenAIError().Message)
+}
+
+func TestToOpenAIError_SanitizesMetadata(t *testing.T) {
+	// Simulate an upstream error with sensitive metadata (e.g., OpenRouter's provider_name/raw)
+	upstreamErr := OpenAIError{
+		Message:  "Rate limit exceeded",
+		Type:     "rate_limit_error",
+		Code:     "rate_limit",
+		Metadata: json.RawMessage(`{"provider_name":"openai","raw":"upstream detail"}`),
+		Param:    "requests",
+	}
+
+	apiErr := &NewAPIError{
+		RelayError:    upstreamErr,
+		errorType:     ErrorTypeOpenAIError,
+		StatusCode:    429,
+		Err:           errors.New("Rate limit exceeded"),
+		clientMessage: "You have exceeded the rate limit. Please try again later.",
+	}
+
+	clientError := apiErr.ToOpenAIError()
+
+	// Client should see the sanitized message, preserved Type/Code, but NO Metadata/Param
+	assert.Equal(t, "You have exceeded the rate limit. Please try again later.", clientError.Message)
+	assert.Equal(t, "rate_limit_error", clientError.Type)
+	assert.Equal(t, "rate_limit", clientError.Code)
+	assert.Nil(t, clientError.Metadata, "Metadata must be cleared for client")
+	assert.Empty(t, clientError.Param, "Param must be cleared for client")
+}
+
+func TestToClaudeError_SanitizesMessage(t *testing.T) {
+	upstreamErr := ClaudeError{
+		Type:    "overloaded_error",
+		Message: "Our systems are currently overloaded. Provider: anthropic-us-east.",
+	}
+
+	apiErr := &NewAPIError{
+		RelayError:    upstreamErr,
+		errorType:     ErrorTypeClaudeError,
+		StatusCode:    529,
+		Err:           errors.New(upstreamErr.Message),
+		clientMessage: "The service is temporarily unavailable. Please retry.",
+	}
+
+	clientError := apiErr.ToClaudeError()
+
+	assert.Equal(t, "The service is temporarily unavailable. Please retry.", clientError.Message)
+	assert.Equal(t, "overloaded_error", clientError.Type)
+}
+
+// TestWithOpenAIError_DoesNotConcatenateMetadataIntoErr verifies that upstream
+// Metadata never reaches Err.Error(). The verbatim error text is served to
+// administrators and written to logs, and when SANITIZE_UPSTREAM_ERROR is off
+// (the default) it also reaches ordinary clients, so metadata must stay out of
+// it regardless of the sanitizer setting.
+func TestWithOpenAIError_DoesNotConcatenateMetadataIntoErr(t *testing.T) {
+	apiErr := WithOpenAIError(OpenAIError{
+		Message:  "Rate limit exceeded",
+		Type:     "rate_limit_error",
+		Code:     "rate_limit",
+		Metadata: json.RawMessage(`{"provider_name":"anthropic","raw":"account xyz-1234 over quota"}`),
+		Param:    "requests",
+	}, http.StatusTooManyRequests)
+
+	assert.NotContains(t, apiErr.Error(), "provider_name")
+	assert.NotContains(t, apiErr.Error(), "xyz-1234")
+	// Metadata is still retained for internal debugging.
+	assert.JSONEq(t, `{"provider_name":"anthropic","raw":"account xyz-1234 over quota"}`, string(apiErr.Metadata))
 }
