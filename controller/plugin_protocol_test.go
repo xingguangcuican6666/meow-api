@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -1729,6 +1730,12 @@ func TestServeTaskPluginImageProtocolWaitsForAsynchronousTask(t *testing.T) {
 		{"timeout", "", http.StatusGatewayTimeout, "task_timeout", "still running"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// This test verifies that the upstream task failure reason reaches the
+			// client, so it turns sanitization off for the assertion.
+			previous := setting.SanitizeUpstreamErrorEnabled
+			setting.SanitizeUpstreamErrorEnabled = false
+			t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = previous })
+
 			pinned := imageProtocolTestEndpoint(t)
 			c, recorder := newImageProtocolTestContext("")
 			deps := pluginProtocolTestDeps()

@@ -108,6 +108,9 @@ func TestTaskLogDTOReplacesLegacyVideoURLWithAvailabilityFlag(t *testing.T) {
 }
 
 func TestTaskLogDTOKeepsFailureReasonAndDoesNotMarkPluginTaskLegacy(t *testing.T) {
+	// This test verifies FailReason passthrough, so it disables sanitization.
+	setUpstreamErrorSanitizer(t, false)
+
 	failed := &model.Task{
 		TaskID:     "task_failed",
 		Platform:   "jimeng",
