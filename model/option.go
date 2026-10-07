@@ -211,6 +211,10 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticRetryStatusCodes"] = operation_setting.AutomaticRetryStatusCodesToString()
 	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
 
+	// 模块管理配置
+	common.OptionMap["HeaderNavModules"] = ""
+	common.OptionMap["SidebarModulesAdmin"] = ""
+
 	// 自动添加所有注册的模型配置
 	modelConfigs := config.GlobalConfig.ExportAllConfigs()
 	maps.Copy(common.OptionMap, modelConfigs)
