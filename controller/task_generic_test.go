@@ -89,6 +89,34 @@ func TestGetTaskDoesNotProjectArtifacts(t *testing.T) {
 	assert.NotContains(t, recorder.Body.String(), "upstream.invalid")
 }
 
+func TestGetTaskProjectsUpstreamFailReasonUnlessAdministrator(t *testing.T) {
+	task := setupGenericTaskTest(t)
+	task.Status = model.TaskStatusFailure
+	task.FailReason = taskFailUpstreamSecret
+	require.NoError(t, model.DB.Save(task).Error)
+	setUpstreamErrorSanitizer(t, true)
+
+	getFailReason := func() string {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Set("id", 7)
+		c.Params = gin.Params{{Key: "key", Value: task.TaskID}}
+		c.Request = httptest.NewRequest(http.MethodGet, "/v1/tasks/"+task.TaskID, nil)
+		GetTask(c)
+		require.Equal(t, http.StatusOK, recorder.Code)
+		var response map[string]any
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+		return response["fail_reason"].(string)
+	}
+
+	userReason := getFailReason()
+	assert.Contains(t, userReason, "The upstream request failed")
+	assert.NotContains(t, userReason, "acct-secret-77")
+
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 7).Update("role", common.RoleAdminUser).Error)
+	assert.Equal(t, taskFailUpstreamSecret, getFailReason())
+}
+
 func TestGetTaskArtifactsReturnsEmptyForLegacyTask(t *testing.T) {
 	task := setupGenericTaskTest(t)
 	recorder := httptest.NewRecorder()

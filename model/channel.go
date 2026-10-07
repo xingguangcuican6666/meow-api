@@ -294,30 +294,50 @@ func (channel *Channel) SaveChannelInfo() error {
 	return DB.Model(channel).Update("channel_info", channel.ChannelInfo).Error
 }
 
-// GetModels returns the channel's comma-separated model names, trimmed. The
-// trim matters because both the abilities table and the memory-cache index are
-// keyed by these exact strings while selection looks them up with the name the
-// client sent, so an untrimmed " beta" would never match a request for "beta".
+// splitCommaSeparated returns the trimmed, non-empty segments of a
+// comma-separated channel column (Models, Group). GetModels, GetGroups and
+// normalizeCommaSeparated all go through it, so the stored value, the ability
+// rows and the in-memory channel index cannot disagree on stray spaces or
+// commas.
+func splitCommaSeparated(raw string) []string {
+	segments := make([]string, 0, strings.Count(raw, ",")+1)
+	for segment := range strings.SplitSeq(raw, ",") {
+		if segment = strings.TrimSpace(segment); segment != "" {
+			segments = append(segments, segment)
+		}
+	}
+	return segments
+}
+
 func (channel *Channel) GetModels() []string {
-	if channel.Models == "" {
-		return []string{}
-	}
-	models := strings.Split(strings.Trim(channel.Models, ","), ",")
-	for i, model := range models {
-		models[i] = strings.TrimSpace(model)
-	}
-	return lo.Filter(models, func(model string, _ int) bool { return model != "" })
+	return splitCommaSeparated(channel.Models)
 }
 
 func (channel *Channel) GetGroups() []string {
-	if channel.Group == "" {
-		return []string{}
+	return splitCommaSeparated(channel.Group)
+}
+
+// normalizeCommaSeparated returns the canonical stored form of a
+// comma-separated channel column: trimmed segments, no empty ones.
+func normalizeCommaSeparated(raw string) string {
+	return strings.Join(splitCommaSeparated(raw), ",")
+}
+
+// BeforeSave stores Models and Group in their canonical form. GORM runs it on
+// the struct behind Create, Save and Updates(channel), where the normalized
+// fields are what reaches the database. Values that bypass that struct
+// (Updates(map), Update(column, value), Updates with another struct) never see
+// the hook, so those write paths call normalizeCommaSeparated themselves.
+func (channel *Channel) BeforeSave(tx *gorm.DB) error {
+	// Assign only on change so a hook run on an already canonical channel, for
+	// example a cached one updated by column, does not write to shared state.
+	if models := normalizeCommaSeparated(channel.Models); models != channel.Models {
+		channel.Models = models
 	}
-	groups := strings.Split(strings.Trim(channel.Group, ","), ",")
-	for i, group := range groups {
-		groups[i] = strings.TrimSpace(group)
+	if group := normalizeCommaSeparated(channel.Group); group != channel.Group {
+		channel.Group = group
 	}
-	return lo.Filter(groups, func(group string, _ int) bool { return group != "" })
+	return nil
 }
 
 func (channel *Channel) GetOtherInfo() map[string]any {
@@ -877,13 +897,20 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 	if modelMapping != nil {
 		updateData.ModelMapping = modelMapping
 	}
-	if models != nil && *models != "" {
-		shouldReCreateAbilities = true
-		updateData.Models = *models
+	// Updates runs BeforeSave on the &Channel{} model, never on updateData, so
+	// Models and Group are normalized here. A value that normalizes to nothing
+	// counts as not provided instead of blanking every channel of the tag.
+	if models != nil {
+		if normalized := normalizeCommaSeparated(*models); normalized != "" {
+			shouldReCreateAbilities = true
+			updateData.Models = normalized
+		}
 	}
-	if group != nil && *group != "" {
-		shouldReCreateAbilities = true
-		updateData.Group = *group
+	if group != nil {
+		if normalized := normalizeCommaSeparated(*group); normalized != "" {
+			shouldReCreateAbilities = true
+			updateData.Group = normalized
+		}
 	}
 	if priority != nil {
 		updateData.Priority = priority

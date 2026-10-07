@@ -17,8 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
+import type { TFunction } from 'i18next'
 import { useEffect, useMemo } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
 
@@ -27,10 +28,13 @@ import {
   FormControl,
   FormDescription,
   FormField,
+  FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { isValidCustomNavHref } from '@/lib/nav-modules'
 
 import {
   SettingsControlChildren,
@@ -47,26 +51,44 @@ import {
   type HeaderNavModulesConfig,
   serializeHeaderNavModules,
 } from './config'
+import { customNavItemSchema } from './custom-nav-item-schema'
+import { CustomNavItemsEditor } from './custom-nav-items-editor'
 
-const headerNavSchema = z.object({
-  home: z.boolean(),
-  console: z.boolean(),
-  pricingEnabled: z.boolean(),
-  pricingRequireAuth: z.boolean(),
-  rankingsEnabled: z.boolean(),
-  rankingsRequireAuth: z.boolean(),
-  docs: z.boolean(),
-  about: z.boolean(),
-})
+const getHeaderNavSchema = (t: TFunction) =>
+  z.object({
+    home: z.boolean(),
+    console: z.boolean(),
+    pricingEnabled: z.boolean(),
+    pricingRequireAuth: z.boolean(),
+    rankingsEnabled: z.boolean(),
+    rankingsRequireAuth: z.boolean(),
+    docs: z.boolean(),
+    // Shared with the System Information section: the same option, empty
+    // meaning "use the default documentation".
+    docsLink: z
+      .string()
+      .trim()
+      .refine(
+        (value) => value === '' || isValidCustomNavHref(value, 'external'),
+        t('Enter a valid http(s) URL.')
+      ),
+    about: z.boolean(),
+    customItems: z.array(customNavItemSchema),
+  })
 
-type HeaderNavFormValues = z.infer<typeof headerNavSchema>
+type HeaderNavFormValues = z.infer<ReturnType<typeof getHeaderNavSchema>>
 
 type HeaderNavigationSectionProps = {
   config: HeaderNavModulesConfig
   initialSerialized: string
+  /** Current `general_setting.docs_link` option value. */
+  docsLink: string
 }
 
-const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
+const toFormValues = (
+  config: HeaderNavModulesConfig,
+  docsLink: string
+): HeaderNavFormValues => ({
   home:
     config.home === undefined ? HEADER_NAV_DEFAULT.home : Boolean(config.home),
   console:
@@ -91,24 +113,28 @@ const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
       : Boolean(config.rankings.requireAuth),
   docs:
     config.docs === undefined ? HEADER_NAV_DEFAULT.docs : Boolean(config.docs),
+  docsLink,
   about:
     config.about === undefined
       ? HEADER_NAV_DEFAULT.about
       : Boolean(config.about),
+  customItems: config.customItems,
 })
 
-export function HeaderNavigationSection({
-  config,
-  initialSerialized,
-}: HeaderNavigationSectionProps) {
+export function HeaderNavigationSection(props: HeaderNavigationSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
-  const formDefaults = useMemo(() => toFormValues(config), [config])
+  const schema = useMemo(() => getHeaderNavSchema(t), [t])
+  const formDefaults = useMemo(
+    () => toFormValues(props.config, props.docsLink),
+    [props.config, props.docsLink]
+  )
 
   const form = useForm<HeaderNavFormValues>({
-    resolver: zodResolver(headerNavSchema),
+    resolver: zodResolver(schema),
     defaultValues: formDefaults,
   })
+  const customItems = useWatch({ control: form.control, name: 'customItems' })
 
   useEffect(() => {
     form.reset(formDefaults)
@@ -116,40 +142,48 @@ export function HeaderNavigationSection({
 
   const onSubmit = async (values: HeaderNavFormValues) => {
     const payload: HeaderNavModulesConfig = {
-      ...config,
+      ...props.config,
       home: values.home,
       console: values.console,
       docs: values.docs,
       about: values.about,
       pricing: {
-        ...(config.pricing ?? HEADER_NAV_DEFAULT.pricing),
+        ...(props.config.pricing ?? HEADER_NAV_DEFAULT.pricing),
         enabled: values.pricingEnabled,
         requireAuth: values.pricingRequireAuth,
       },
       rankings: {
-        ...(config.rankings ?? HEADER_NAV_DEFAULT.rankings),
+        ...(props.config.rankings ?? HEADER_NAV_DEFAULT.rankings),
         enabled: values.rankingsEnabled,
         requireAuth: values.rankingsRequireAuth,
       },
+      customItems: values.customItems,
     }
 
     const serialized = serializeHeaderNavModules(payload)
-    if (serialized === initialSerialized) {
-      return
+    if (serialized !== props.initialSerialized) {
+      await updateOption.mutateAsync({
+        key: 'HeaderNavModules',
+        value: serialized,
+      })
     }
 
-    await updateOption.mutateAsync({
-      key: 'HeaderNavModules',
-      value: serialized,
-    })
+    if (values.docsLink !== props.docsLink.trim()) {
+      await updateOption.mutateAsync({
+        key: 'general_setting.docs_link',
+        value: values.docsLink,
+      })
+    }
   }
 
+  // The documentation link is a site-wide option shared with System
+  // Information, so resetting the navigation defaults leaves it as typed.
   const resetToDefault = () => {
-    form.reset(toFormValues(HEADER_NAV_DEFAULT))
+    form.reset(toFormValues(HEADER_NAV_DEFAULT, form.getValues('docsLink')))
   }
 
   const simpleModules: Array<{
-    key: keyof HeaderNavFormValues
+    key: 'home' | 'console' | 'about'
     title: string
     description: string
   }> = [
@@ -164,11 +198,6 @@ export function HeaderNavigationSection({
       description: t('User dashboard and quota controls.'),
     },
     {
-      key: 'docs',
-      title: t('Docs'),
-      description: t('Documentation or external knowledge base.'),
-    },
-    {
       key: 'about',
       title: t('About'),
       description: t('Static page describing the platform.'),
@@ -176,8 +205,8 @@ export function HeaderNavigationSection({
   ]
 
   const accessModules: Array<{
-    enabledKey: keyof HeaderNavFormValues
-    requireAuthKey: keyof HeaderNavFormValues
+    enabledKey: 'pricingEnabled' | 'rankingsEnabled'
+    requireAuthKey: 'pricingRequireAuth' | 'rankingsRequireAuth'
     requireAuthDependsOn: 'pricingEnabled' | 'rankingsEnabled'
     title: string
     description: string
@@ -293,9 +322,63 @@ export function HeaderNavigationSection({
                 />
               </SettingsControlGroup>
             ))}
+
+            <SettingsControlGroup>
+              <FormField
+                control={form.control}
+                name='docs'
+                render={({ field }) => (
+                  <SettingsSwitchItem>
+                    <SettingsSwitchContent>
+                      <FormLabel>{t('Docs')}</FormLabel>
+                      <FormDescription>
+                        {t('Documentation or external knowledge base.')}
+                      </FormDescription>
+                    </SettingsSwitchContent>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </SettingsSwitchItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='docsLink'
+                render={({ field }) => (
+                  <SettingsControlChildren>
+                    <FormItem>
+                      <FormLabel>{t('Documentation Link')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={t('https://docs.example.com')}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t('Link to your documentation site')}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  </SettingsControlChildren>
+                )}
+              />
+            </SettingsControlGroup>
           </div>
         </SettingsForm>
       </Form>
+
+      {/* Outside the form above: the dialog has its own <form>, and submit events bubble through React portals. */}
+      <CustomNavItemsEditor
+        items={customItems}
+        onChange={(items) =>
+          form.setValue('customItems', items, { shouldDirty: true })
+        }
+      />
     </SettingsSection>
   )
 }

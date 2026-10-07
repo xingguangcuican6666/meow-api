@@ -108,6 +108,11 @@ type NewAPIError struct {
 	// auto-disable keyword matching, retry classification, error logs — keep
 	// reading the verbatim Err so they always see the real upstream error.
 	clientMessage string
+	// localError marks errors constructed locally by this application (NewError,
+	// NewErrorWithStatusCode, NewOpenAIError). When true, the error is actionable
+	// client guidance and should not be sanitized. When false (default), the error
+	// originated from upstream and must be sanitized before showing to the client.
+	localError bool
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.
@@ -205,6 +210,14 @@ func (e *NewAPIError) GetClientMessage() string {
 	return e.clientMessage
 }
 
+// IsLocalError returns true if this error was constructed locally by this
+// application (NewError, NewErrorWithStatusCode, NewOpenAIError) rather than
+// being wrapped from an upstream response (WithOpenAIError, WithClaudeError).
+// Local errors are actionable client guidance and should not be sanitized.
+func (e *NewAPIError) IsLocalError() bool {
+	return e != nil && e.localError
+}
+
 func (e *NewAPIError) ToOpenAIError() OpenAIError {
 	var result OpenAIError
 	switch e.errorType {
@@ -290,6 +303,7 @@ func NewError(err error, errorCode ErrorCode, ops ...NewAPIErrorOptions) *NewAPI
 		errorType:  ErrorTypeNewAPIError,
 		StatusCode: http.StatusInternalServerError,
 		errorCode:  errorCode,
+		localError: true,
 	}
 	for _, op := range ops {
 		op(e)
@@ -319,7 +333,18 @@ func NewOpenAIError(err error, errorCode ErrorCode, statusCode int, ops ...NewAP
 		Type:    string(errorCode),
 		Code:    errorCode,
 	}
-	return WithOpenAIError(openaiError, statusCode, ops...)
+	e := &NewAPIError{
+		Err:        err,
+		RelayError: openaiError,
+		errorType:  ErrorTypeOpenAIError,
+		StatusCode: statusCode,
+		errorCode:  errorCode,
+		localError: true,
+	}
+	for _, op := range ops {
+		op(e)
+	}
+	return e
 }
 
 func InitOpenAIError(errorCode ErrorCode, statusCode int, ops ...NewAPIErrorOptions) *NewAPIError {
@@ -340,6 +365,7 @@ func NewErrorWithStatusCode(err error, errorCode ErrorCode, statusCode int, ops 
 		errorType:  ErrorTypeNewAPIError,
 		StatusCode: statusCode,
 		errorCode:  errorCode,
+		localError: true,
 	}
 	for _, op := range ops {
 		op(e)
@@ -451,6 +477,16 @@ func IsEmptyResponseRetryError(err *NewAPIError) bool {
 func ErrOptionWithSkipRetry() NewAPIErrorOptions {
 	return func(e *NewAPIError) {
 		e.skipRetry = true
+	}
+}
+
+// ErrOptionAsLocalError marks an error whose text this application authored
+// itself (for example an administrator-written param override message), so it
+// reaches the client verbatim. It must never be applied to text derived from an
+// upstream response.
+func ErrOptionAsLocalError() NewAPIErrorOptions {
+	return func(e *NewAPIError) {
+		e.localError = true
 	}
 }
 

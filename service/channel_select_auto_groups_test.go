@@ -420,3 +420,94 @@ func TestCacheGetRandomSatisfiedChannelIgnoresOperatorForUnmappedModel(t *testin
 	require.NotNil(t, channel)
 	assert.Equal(t, 2502, channel.Id)
 }
+
+// TestChannelSelectionAgreesOnTrimmedChannelGroup follows a channel whose Group
+// carries stray spaces from storage to billing: the ability rows, the cache
+// index, the selected group and the request context must all name "vip".
+func TestChannelSelectionAgreesOnTrimmedChannelGroup(t *testing.T) {
+	const (
+		modelName    = "padded-group-model"
+		vipChannelID = 2701
+	)
+	tests := []struct {
+		name string
+		// legacy stores the channel the way pre-normalization code did: padded
+		// raw columns and a padded ability row, healed by FixAbility.
+		legacy bool
+		// auto routes through the token auto-group list instead of the user's
+		// multi-group pool.
+		auto            bool
+		wantUsingGroup  string
+		wantStoredGroup string
+	}{
+		{name: "inserted channel in user group pool", wantUsingGroup: "vip", wantStoredGroup: "vip"},
+		{name: "inserted channel in auto groups", auto: true, wantUsingGroup: "auto", wantStoredGroup: "vip"},
+		{name: "legacy channel in user group pool", legacy: true, wantUsingGroup: "vip", wantStoredGroup: " vip "},
+		{name: "legacy channel in auto groups", legacy: true, auto: true, wantUsingGroup: "auto", wantStoredGroup: " vip "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupChannelSelectAutoGroupsTest(t)
+			vipPriority, defaultPriority := int64(10), int64(0)
+			weight := uint(100)
+			vipChannel := &model.Channel{
+				Id: vipChannelID, Type: constant.ChannelTypeOpenAI, Key: "key-vip", Status: common.ChannelStatusEnabled,
+				Name: "vip-channel", Weight: &weight, Models: modelName, Group: " vip ", Priority: &vipPriority,
+			}
+			defaultChannel := &model.Channel{
+				Id: vipChannelID + 1, Type: constant.ChannelTypeOpenAI, Key: "key-default", Status: common.ChannelStatusEnabled,
+				Name: "default-channel", Weight: &weight, Models: modelName, Group: "default", Priority: &defaultPriority,
+			}
+			require.NoError(t, defaultChannel.Insert())
+			if tt.legacy {
+				require.NoError(t, db.Session(&gorm.Session{SkipHooks: true}).Create(vipChannel).Error)
+				require.NoError(t, db.Create(&model.Ability{
+					Group: " vip ", Model: modelName, ChannelId: vipChannelID, Enabled: true, Priority: &vipPriority, Weight: weight,
+				}).Error)
+				_, failed, err := model.FixAbility()
+				require.NoError(t, err)
+				require.Zero(t, failed)
+			} else {
+				require.NoError(t, vipChannel.Insert())
+				model.InitChannelCache()
+			}
+
+			var stored model.Channel
+			require.NoError(t, db.First(&stored, vipChannelID).Error)
+			assert.Equal(t, tt.wantStoredGroup, stored.Group)
+			var abilities []model.Ability
+			require.NoError(t, db.Where("channel_id = ?", vipChannelID).Find(&abilities).Error)
+			require.Len(t, abilities, 1)
+			assert.Equal(t, "vip", abilities[0].Group)
+			assert.Equal(t, modelName, abilities[0].Model)
+			assert.True(t, model.IsChannelEnabledForGroupModel("vip", modelName, vipChannelID))
+			assert.False(t, model.IsChannelEnabledForGroupModel(" vip ", modelName, vipChannelID))
+
+			gin.SetMode(gin.TestMode)
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+			retry := 0
+			param := &RetryParam{Ctx: ctx, TokenGroup: "default", ModelName: modelName, RequestPath: "/v1/chat/completions", Retry: &retry}
+			if tt.auto {
+				param.TokenGroup = "auto"
+				common.SetContextKey(ctx, constant.ContextKeyTokenAutoGroups, []string{"vip", "default"})
+				common.SetContextKey(ctx, constant.ContextKeyTokenCrossGroupRetry, true)
+			} else {
+				common.SetContextKey(ctx, constant.ContextKeyUserGroups, []string{"default", "vip"})
+			}
+			common.SetContextKey(ctx, constant.ContextKeyUsingGroup, param.TokenGroup)
+
+			channel, selectedGroup, err := CacheGetRandomSatisfiedChannel(param)
+			require.NoError(t, err)
+			require.NotNil(t, channel)
+			assert.Equal(t, vipChannelID, channel.Id, "the higher priority vip channel must be reachable by its trimmed group")
+			assert.Equal(t, "vip", selectedGroup)
+			assert.Equal(t, tt.wantUsingGroup, common.GetContextKeyString(ctx, constant.ContextKeyUsingGroup))
+			// The price helper bills the auto-group context value over the using
+			// group, so that value decides the group ratio the request pays.
+			billingGroup := common.GetContextKeyString(ctx, constant.ContextKeyAutoGroup)
+			assert.Equal(t, "vip", billingGroup)
+			assert.InDelta(t, 2.0, ratio_setting.GetGroupRatio(billingGroup), 1e-9)
+		})
+	}
+}

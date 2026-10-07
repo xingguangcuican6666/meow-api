@@ -24,6 +24,27 @@ export type ModuleAccess = { enabled: boolean; requireAuth: boolean }
 
 export type HeaderNavModule = 'rankings' | 'pricing'
 
+export type CustomNavOpenMode = 'internal' | 'iframe' | 'external'
+
+export type CustomNavItem = {
+  id: string
+  title: string
+  href: string
+  requireAuth: boolean
+  openMode: CustomNavOpenMode
+}
+
+export const CUSTOM_NAV_MAX_ITEMS = 20
+export const CUSTOM_NAV_TITLE_MAX_LENGTH = 50
+export const CUSTOM_NAV_HREF_MAX_LENGTH = 2048
+
+const CUSTOM_NAV_OPEN_MODES: readonly CustomNavOpenMode[] = [
+  'internal',
+  'iframe',
+  'external',
+]
+const CUSTOM_NAV_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+
 export type HeaderNavModules = {
   home: boolean
   console: boolean
@@ -31,7 +52,8 @@ export type HeaderNavModules = {
   rankings: ModuleAccess
   docs: boolean
   about: boolean
-  [key: string]: boolean | ModuleAccess
+  customItems: CustomNavItem[]
+  [key: string]: boolean | ModuleAccess | CustomNavItem[]
 }
 
 const DEFAULT_HEADER_NAV_MODULES: HeaderNavModules = {
@@ -41,6 +63,7 @@ const DEFAULT_HEADER_NAV_MODULES: HeaderNavModules = {
   rankings: { enabled: true, requireAuth: false },
   docs: true,
   about: true,
+  customItems: [],
 }
 
 const DEFAULTS: Record<HeaderNavModule, ModuleAccess> = {
@@ -53,7 +76,79 @@ function cloneHeaderNavDefaults(): HeaderNavModules {
     ...DEFAULT_HEADER_NAV_MODULES,
     pricing: { ...DEFAULT_HEADER_NAV_MODULES.pricing },
     rankings: { ...DEFAULT_HEADER_NAV_MODULES.rankings },
+    customItems: [],
   }
+}
+
+/**
+ * Whether `href` is safe to link to for the given open mode.
+ *
+ * Only absolute http(s) URLs with a host and no credentials qualify for
+ * `iframe` and `external`, so a stored `javascript:` or `data:` URL can never
+ * reach an anchor or a frame. `internal` also accepts an app path, but not a
+ * protocol-relative one (`//host`). Kept in step with `validateCustomNavHref`
+ * in `model/option.go`, which enforces the same rules on save.
+ */
+export function isValidCustomNavHref(
+  href: string,
+  openMode: CustomNavOpenMode
+): boolean {
+  const value = href.trim()
+  if (!value || value.length > CUSTOM_NAV_HREF_MAX_LENGTH) return false
+  if ([...value].some((ch) => ch.charCodeAt(0) <= 32 || ch === '\u007f')) {
+    return false
+  }
+  if (openMode === 'internal' && value.startsWith('/')) {
+    return !value.startsWith('//') && !value.startsWith('/\\')
+  }
+  // Read the authority from the raw text instead of trusting URL parsing: the
+  // WHATWG parser repairs `http:host`, `https:///host` and `\` into valid
+  // addresses, and the server validator rejects all of them.
+  const authority = /^https?:\/\/([^/?#]*)/i.exec(value)?.[1]
+  if (!authority || authority.includes('@') || value.includes('\\')) {
+    return false
+  }
+  try {
+    return Boolean(new URL(value))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Normalise a stored `customItems` value, dropping every entry that is not a
+ * complete, safe item. Fails closed: a malformed entry disappears instead of
+ * being repaired into something clickable.
+ */
+export function parseCustomNavItems(raw: unknown): CustomNavItem[] {
+  if (!Array.isArray(raw)) return []
+
+  const items: CustomNavItem[] = []
+  const seen = new Set<string>()
+  for (const entry of raw) {
+    if (items.length >= CUSTOM_NAV_MAX_ITEMS) break
+    if (!entry || typeof entry !== 'object') continue
+
+    const record = entry as Record<string, unknown>
+    const id = typeof record.id === 'string' ? record.id.trim() : ''
+    const title = typeof record.title === 'string' ? record.title.trim() : ''
+    const href = typeof record.href === 'string' ? record.href.trim() : ''
+    const openMode = CUSTOM_NAV_OPEN_MODES.find((m) => m === record.openMode)
+
+    if (!CUSTOM_NAV_ID_PATTERN.test(id) || seen.has(id)) continue
+    if (!title || title.length > CUSTOM_NAV_TITLE_MAX_LENGTH) continue
+    if (!openMode || !isValidCustomNavHref(href, openMode)) continue
+
+    seen.add(id)
+    items.push({
+      id,
+      title,
+      href,
+      openMode,
+      requireAuth: parseHeaderNavBoolean(record.requireAuth, false),
+    })
+  }
+  return items
 }
 
 export function parseHeaderNavBoolean(
@@ -118,6 +213,10 @@ export function parseHeaderNavModules(raw: unknown): HeaderNavModules {
     }
     if (key === 'rankings') {
       result.rankings = parseAccess(value, result.rankings)
+      return
+    }
+    if (key === 'customItems') {
+      result.customItems = parseCustomNavItems(value)
       return
     }
 

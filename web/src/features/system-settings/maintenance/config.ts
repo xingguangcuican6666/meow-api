@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { parseCustomNavItems, type CustomNavItem } from '@/lib/nav-modules'
+
 export type HeaderNavAccessConfig = {
   enabled: boolean
   requireAuth: boolean
@@ -28,7 +30,8 @@ export type HeaderNavModulesConfig = {
   rankings: HeaderNavAccessConfig
   docs: boolean
   about: boolean
-  [key: string]: boolean | HeaderNavAccessConfig
+  customItems: CustomNavItem[]
+  [key: string]: boolean | HeaderNavAccessConfig | CustomNavItem[]
 }
 
 export type SidebarSectionConfig = {
@@ -51,6 +54,7 @@ export const HEADER_NAV_DEFAULT: HeaderNavModulesConfig = {
   },
   docs: true,
   about: true,
+  customItems: [],
 }
 
 export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
@@ -100,6 +104,7 @@ const cloneHeaderNavDefault = (): HeaderNavModulesConfig => ({
   ...HEADER_NAV_DEFAULT,
   pricing: { ...HEADER_NAV_DEFAULT.pricing },
   rankings: { ...HEADER_NAV_DEFAULT.rankings },
+  customItems: HEADER_NAV_DEFAULT.customItems.map((item) => ({ ...item })),
 })
 
 const parseAccessModule = (
@@ -159,6 +164,10 @@ export function parseHeaderNavModules(
         result.rankings = parseAccessModule(raw, base.rankings)
         return
       }
+      if (key === 'customItems') {
+        result.customItems = parseCustomNavItems(raw)
+        return
+      }
 
       if (typeof raw === 'boolean') {
         result[key] = raw
@@ -179,7 +188,12 @@ export function parseHeaderNavModules(
 export function serializeHeaderNavModules(
   config: HeaderNavModulesConfig
 ): string {
-  return JSON.stringify(config)
+  // Custom items go through the shared parser on the way out as well, so an
+  // unsafe or malformed entry is never persisted.
+  return JSON.stringify({
+    ...config,
+    customItems: parseCustomNavItems(config.customItems),
+  })
 }
 
 export function parseSidebarModulesAdmin(

@@ -123,6 +123,51 @@ func TestHeaderNavModuleAuthRejectsLegacyDisabledModule(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 }
 
+func TestHeaderNavModuleAuthParsesModuleAccessWithCustomItems(t *testing.T) {
+	const customItems = `"customItems":[{"id":"status","title":"Status","href":"https://status.example.com","openMode":"iframe","requireAuth":true}]`
+	tests := []struct {
+		name       string
+		raw        string
+		module     string
+		wantStatus int
+	}{
+		{
+			name:       "custom items alone keep the default public access",
+			raw:        `{` + customItems + `}`,
+			module:     "pricing",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "custom item requireAuth does not gate a public module",
+			raw:        `{"pricing":{"enabled":true,"requireAuth":false},` + customItems + `}`,
+			module:     "pricing",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "module requireAuth is kept next to custom items",
+			raw:        `{"rankings":{"enabled":true,"requireAuth":true},` + customItems + `}`,
+			module:     "rankings",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "module can still be disabled after custom items",
+			raw:        `{` + customItems + `,"pricing":{"enabled":false,"requireAuth":false}}`,
+			module:     "pricing",
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withHeaderNavModules(t, tt.raw)
+
+			recorder := performHeaderNavRequest(t, HeaderNavModuleAuth(tt.module), false)
+
+			require.Equal(t, tt.wantStatus, recorder.Code)
+		})
+	}
+}
+
 func TestHeaderNavModulePublicOrUserAuthAllowsDefaultPublicAccess(t *testing.T) {
 	withHeaderNavModules(t, "")
 

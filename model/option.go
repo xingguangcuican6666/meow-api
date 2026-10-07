@@ -1,11 +1,17 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"maps"
+	"net/url"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf16"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -272,6 +278,139 @@ func validateOptionValue(key string, value string) error {
 	}
 	if key == "MaxTokenAutoGroups" {
 		return setting.ValidateMaxTokenAutoGroups(value)
+	}
+	if key == "HeaderNavModules" {
+		return validateHeaderNavModules(value)
+	}
+	return nil
+}
+
+const (
+	headerNavMaxCustomItems = 20
+	headerNavMaxTitleLength = 50
+	headerNavMaxHrefLength  = 2048
+)
+
+var (
+	headerNavItemIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+	headerNavOpenModes     = []string{"internal", "iframe", "external"}
+)
+
+// validateHeaderNavModules rejects a HeaderNavModules option that would publish
+// an unsafe or malformed custom navigation entry. The option is served to every
+// visitor through /api/status and its links become anchor hrefs and iframe
+// sources, so the server cannot rely on the frontend filter alone. An empty
+// value means "use the defaults", and keys other than customItems are left
+// alone for forward compatibility.
+//
+// The custom item rules mirror parseCustomNavItems and isValidCustomNavHref in
+// web/src/lib/nav-modules.ts; keep the two in sync. Lengths are counted in
+// UTF-16 code units, like String.length there.
+func validateHeaderNavModules(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	var parsed any
+	if err := common.Unmarshal([]byte(value), &parsed); err != nil {
+		return fmt.Errorf("header navigation config must be a valid JSON object: %w", err)
+	}
+	config, ok := parsed.(map[string]any)
+	if !ok {
+		return errors.New("header navigation config must be a JSON object")
+	}
+	rawItems, present := config["customItems"]
+	if !present {
+		return nil
+	}
+	items, ok := rawItems.([]any)
+	if !ok {
+		return errors.New("header navigation customItems must be an array")
+	}
+	if len(items) > headerNavMaxCustomItems {
+		return fmt.Errorf("header navigation customItems must contain at most %d items", headerNavMaxCustomItems)
+	}
+	seenIDs := make(map[string]struct{}, len(items))
+	for i, rawItem := range items {
+		if err := validateCustomNavItem(rawItem, seenIDs); err != nil {
+			return fmt.Errorf("custom navigation item %d: %w", i+1, err)
+		}
+	}
+	return nil
+}
+
+// validateCustomNavItem checks one entry of HeaderNavModules.customItems and
+// records its id in seenIDs so a repeated id is reported. Entries are read as
+// generic maps, never structs, so key matching stays exact like the frontend's.
+func validateCustomNavItem(rawItem any, seenIDs map[string]struct{}) error {
+	item, ok := rawItem.(map[string]any)
+	if !ok {
+		return errors.New("must be an object")
+	}
+
+	id, _ := item["id"].(string)
+	if !headerNavItemIDPattern.MatchString(id) {
+		return errors.New("id must be 1 to 64 letters, digits, underscores or hyphens")
+	}
+	if _, duplicate := seenIDs[id]; duplicate {
+		return fmt.Errorf("duplicate id %q", id)
+	}
+	seenIDs[id] = struct{}{}
+
+	title, _ := item["title"].(string)
+	title = strings.TrimSpace(title)
+	if title == "" || len(utf16.Encode([]rune(title))) > headerNavMaxTitleLength {
+		return fmt.Errorf("title must be 1 to %d characters", headerNavMaxTitleLength)
+	}
+
+	openMode, _ := item["openMode"].(string)
+	if !slices.Contains(headerNavOpenModes, openMode) {
+		return errors.New("openMode must be one of internal, iframe or external")
+	}
+
+	// The frontend reads a malformed requireAuth as false, which would quietly
+	// publish the link to everyone, so a present value must be a real boolean.
+	if requireAuth, present := item["requireAuth"]; present {
+		if _, isBool := requireAuth.(bool); !isBool {
+			return errors.New("requireAuth must be true or false")
+		}
+	}
+
+	href, _ := item["href"].(string)
+	return validateCustomNavHref(strings.TrimSpace(href), openMode)
+}
+
+// validateCustomNavHref reports whether href, already trimmed, is safe to render
+// as a link or frame source for the given open mode. Only http(s) URLs qualify
+// for iframe and external, so a stored javascript: or data: URL can never reach
+// an anchor or a frame. internal also accepts an app path, but not a
+// protocol-relative one (//host or /\host). Whitespace and control characters
+// are refused first because browsers strip tabs and newlines from URLs, which
+// would turn a value such as "/<TAB>/host" into "//host".
+func validateCustomNavHref(href, openMode string) error {
+	if href == "" {
+		return errors.New("href must not be empty")
+	}
+	if len(utf16.Encode([]rune(href))) > headerNavMaxHrefLength {
+		return fmt.Errorf("href must be at most %d characters", headerNavMaxHrefLength)
+	}
+	if strings.ContainsFunc(href, unicode.IsSpace) || strings.ContainsFunc(href, unicode.IsControl) {
+		return errors.New("href must not contain whitespace or control characters")
+	}
+	if openMode == "internal" && strings.HasPrefix(href, "/") {
+		if strings.HasPrefix(href, "//") || strings.HasPrefix(href, `/\`) {
+			return errors.New(`href must be an app path starting with a single "/"`)
+		}
+		return nil
+	}
+	parsed, err := url.Parse(href)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" {
+		if openMode == "internal" {
+			return errors.New(`href must be an app path starting with "/" or an absolute http(s) URL`)
+		}
+		return errors.New("href must be an absolute http(s) URL")
+	}
+	if parsed.User != nil {
+		return errors.New("href must not contain credentials")
 	}
 	return nil
 }

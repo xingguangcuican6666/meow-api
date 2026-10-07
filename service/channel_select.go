@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -248,7 +247,7 @@ func alignSelectedGroup(param *RetryParam, groups []string, channel *model.Chann
 	if channel == nil || len(groups) <= 1 {
 		return selectGroup
 	}
-	channelGroups := strings.Split(channel.Group, ",")
+	channelGroups := channel.GetGroups()
 	for _, group := range groups {
 		if !slices.Contains(channelGroups, group) {
 			continue

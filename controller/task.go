@@ -50,7 +50,7 @@ func GetTask(c *gin.Context) {
 	if createdAt == 0 {
 		createdAt = task.SubmitTime
 	}
-	failReason := task.FailReason
+	failReason := service.TaskFailReasonForClient(c, task)
 	if task.Status == model.TaskStatusSuccess && taskFailReasonIsLegacyResultURL(task.FailReason) {
 		failReason = ""
 	}
@@ -456,6 +456,11 @@ func tasksToDto(tasks []*model.Task, fillUser bool, viewerRole int) []*dto.TaskD
 		item := relay.TaskModel2Dto(task, setting.UpstreamPrivacyProtectionEnabled && viewerRole < common.RoleAdminUser)
 		item.LegacyVideoAvailable = legacyVideoAvailable(task)
 		item.ResultDiscarded = task.PrivateData.ResultDiscarded
+		if viewerRole >= common.RoleAdminUser && task.Status == model.TaskStatusFailure {
+			// The conversion applies the client projection; administrators read the
+			// stored failure reason verbatim.
+			item.FailReason = task.FailReason
+		}
 		if task.Status == model.TaskStatusSuccess {
 			item.ResultURL = ""
 			if taskFailReasonIsLegacyResultURL(task.FailReason) {

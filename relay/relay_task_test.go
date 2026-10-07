@@ -15,6 +15,7 @@ import (
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/gin-gonic/gin"
@@ -101,6 +102,85 @@ func TestTaskModel2DtoNormalizesLegacyAction(t *testing.T) {
 
 	assert.Equal(t, constant.TaskActionFirstTailToVideo, dtoTask.Action)
 	assert.Equal(t, "firstTailGenerate", task.Action)
+}
+
+func setUpstreamErrorSanitizer(t *testing.T, enabled bool) {
+	t.Helper()
+	previous := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = enabled
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = previous })
+}
+
+const taskFailUpstreamSecret = "account acct-secret-77 on https://api.vendor.example/v1 has balance 0"
+
+func TestTaskModel2DtoProjectsUpstreamFailureForClient(t *testing.T) {
+	upstreamBody := `{"error":"` + taskFailUpstreamSecret + `"}`
+	failed := func(reason string) *model.Task {
+		return &model.Task{TaskID: "task_dto_fail", Status: model.TaskStatusFailure, FailReason: reason, Data: []byte(upstreamBody)}
+	}
+
+	setUpstreamErrorSanitizer(t, true)
+	projected := TaskModel2Dto(failed(taskFailUpstreamSecret), false)
+	assert.Equal(t, service.StandardUpstreamMessage(nil, 0), projected.FailReason)
+	// FailReason is the legacy fallback of GetResultURL and the snapshot holds
+	// the upstream body; neither may carry the text around the projection.
+	assert.Empty(t, projected.ResultURL)
+	assert.Empty(t, projected.Data)
+	encoded, err := common.Marshal(projected)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "acct-secret-77")
+	assert.NotContains(t, string(encoded), "vendor.example")
+
+	local := TaskModel2Dto(failed("任务超时（5分钟）"), false)
+	assert.Equal(t, "任务超时（5分钟）", local.FailReason)
+	assert.JSONEq(t, upstreamBody, string(local.Data))
+
+	setUpstreamErrorSanitizer(t, false)
+	verbatim := TaskModel2Dto(failed(taskFailUpstreamSecret), false)
+	assert.Equal(t, taskFailUpstreamSecret, verbatim.FailReason)
+	assert.JSONEq(t, upstreamBody, string(verbatim.Data))
+}
+
+func TestVideoFetchByIDProjectsUpstreamFailureUnlessAdministrator(t *testing.T) {
+	database := setupRelayChannelDB(t)
+	require.NoError(t, database.AutoMigrate(&model.Task{}, &model.User{}))
+	setUpstreamErrorSanitizer(t, true)
+	upstreamBody := `{"error":"` + taskFailUpstreamSecret + `"}`
+	for name, role := range map[string]int{"user": common.RoleCommonUser, "admin": common.RoleAdminUser} {
+		t.Run(name, func(t *testing.T) {
+			owner := &model.User{Username: "fetch-" + name, Role: role, Status: common.UserStatusEnabled, AffCode: "fetch-" + name}
+			require.NoError(t, database.Create(owner).Error)
+			task := &model.Task{
+				TaskID: "task_fetch_" + name, Platform: "kling", UserId: owner.Id,
+				Status: model.TaskStatusFailure, FailReason: taskFailUpstreamSecret, Data: []byte(upstreamBody),
+			}
+			require.NoError(t, database.Create(task).Error)
+
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/video/generations/"+task.TaskID, nil)
+			c.Params = gin.Params{{Key: "task_id", Value: task.TaskID}}
+			c.Set("id", owner.Id)
+
+			body, taskErr := videoFetchByIDRespBodyBuilder(c)
+			require.Nil(t, taskErr)
+			var response struct {
+				Data struct {
+					FailReason string `json:"fail_reason"`
+					Data       any    `json:"data"`
+				} `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(body, &response))
+			if role == common.RoleAdminUser {
+				assert.Equal(t, taskFailUpstreamSecret, response.Data.FailReason)
+				assert.NotNil(t, response.Data.Data)
+				return
+			}
+			assert.Equal(t, service.StandardUpstreamMessage(c, 0), response.Data.FailReason)
+			assert.Nil(t, response.Data.Data)
+			assert.NotContains(t, string(body), "acct-secret-77")
+			assert.NotContains(t, string(body), "vendor.example")
+		})
+	}
 }
 
 const mappingOrderSubmitPlugin = `

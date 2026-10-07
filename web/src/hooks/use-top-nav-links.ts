@@ -95,6 +95,31 @@ export function useTopNavLinks(): TopNavLink[] {
     }
   }
 
+  // Custom navigation items. `customItems` is already validated by
+  // parseCustomNavItems, so every href is safe for its open mode.
+  for (const item of modules.customItems) {
+    const requiresAuth = item.requireAuth && !isAuthed
+
+    if (item.openMode === 'external') {
+      links.push({
+        title: item.title,
+        href: item.href,
+        external: true,
+        requiresAuth,
+      })
+    } else if (item.openMode === 'iframe') {
+      // The framed URL is resolved by id in the route, never carried in the
+      // address bar.
+      links.push({
+        title: item.title,
+        href: `/custom/${encodeURIComponent(item.id)}`,
+        requiresAuth,
+      })
+    } else {
+      links.push({ title: item.title, href: item.href, requiresAuth })
+    }
+  }
+
   // About
   if (modules?.about !== false) {
     links.push({ title: t('About'), href: '/about' })

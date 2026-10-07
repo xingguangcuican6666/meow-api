@@ -694,6 +694,11 @@ func executeTaskSubmissionWith(
 			if channelErr != nil {
 				logger.LogError(c, channelErr.Error())
 				taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", channelErr.StatusCode)
+				// getChannel pins fixed phrasing when the error text came from
+				// upstream; the response must carry it, not the verbatim Err.
+				if pinned := channelErr.GetClientMessage(); pinned != "" {
+					taskErr.Message = pinned
+				}
 				break
 			}
 		}

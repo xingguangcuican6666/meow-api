@@ -7,7 +7,8 @@ import (
 )
 
 // BuildTaskPluginView converts a persisted task into the deliberately narrow
-// public shape permitted at JavaScript plugin boundaries.
+// public shape permitted at JavaScript plugin boundaries. Presenters answer API
+// clients, so FailReason is the client projection of the stored reason.
 func BuildTaskPluginView(task *model.Task) (dto.TaskView, error) {
 	createdAt := task.CreatedAt
 	if createdAt == 0 {
@@ -18,7 +19,7 @@ func BuildTaskPluginView(task *model.Task) (dto.TaskView, error) {
 		Platform:   string(task.Platform),
 		Status:     string(task.Status),
 		Progress:   task.Progress,
-		FailReason: task.FailReason,
+		FailReason: TaskFailReasonForClient(nil, task),
 		CreatedAt:  createdAt,
 		UpdatedAt:  task.UpdatedAt,
 		FinishedAt: task.FinishTime,

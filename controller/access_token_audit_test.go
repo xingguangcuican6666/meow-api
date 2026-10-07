@@ -438,7 +438,9 @@ func newAuditTestDatabase(t *testing.T, kind, dsn string) (*gorm.DB, string) {
 	t.Helper()
 	if kind == "sqlite" {
 		path := t.TempDir() + "/audit.db"
-		db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+		// Production pragmas: without a busy timeout and BEGIN IMMEDIATE, concurrent
+		// writers fail with SQLITE_BUSY instead of queueing.
+		db, err := gorm.Open(sqlite.Open(path+"?"+common.SQLitePragmaQuery), &gorm.Config{})
 		require.NoError(t, err)
 		return db, path
 	}
