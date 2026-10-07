@@ -23,10 +23,13 @@ import "github.com/QuantumNous/new-api/common"
 // message, because the client cannot act on those failures otherwise.
 //
 // Bootstrap default comes from SANITIZE_UPSTREAM_ERROR; the root setting of the
-// same name overrides it at runtime. Off by default so no existing deployment
-// sees its responses change on upgrade.
-var SanitizeUpstreamErrorEnabled = false
+// same name overrides it at runtime. On by default: forwarding upstream error
+// bodies verbatim is a disclosure defect, not a feature, and the sanitized
+// response still carries the HTTP status, protocol error type and error code so
+// clients keep their error handling. Deployments that depend on the verbatim
+// text can set SANITIZE_UPSTREAM_ERROR=false or flip the root setting.
+var SanitizeUpstreamErrorEnabled = true
 
 func init() {
-	SanitizeUpstreamErrorEnabled = common.GetEnvOrDefaultBool("SANITIZE_UPSTREAM_ERROR", false)
+	SanitizeUpstreamErrorEnabled = common.GetEnvOrDefaultBool("SANITIZE_UPSTREAM_ERROR", true)
 }
