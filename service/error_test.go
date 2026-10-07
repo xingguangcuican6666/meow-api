@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -208,6 +209,34 @@ func TestRelayErrorHandlerSanitizesClaudeProjection(t *testing.T) {
 	claudeError := newAPIError.ToClaudeError()
 	require.Equal(t, StandardUpstreamMessage(c, http.StatusTooManyRequests), claudeError.Message)
 	require.Contains(t, newAPIError.Err.Error(), "upstream-a.example.com")
+}
+
+// StandardizeUpstreamError must also override a client message that a caller
+// pinned by hand: the user-channel breaker replays a verbatim upstream failure
+// under the local ErrorCodeGetChannelFailed code, which the allowlist would
+// otherwise pass through untouched.
+func TestStandardizeUpstreamErrorOverridesPinnedClientMessage(t *testing.T) {
+	original := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = true
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = original })
+
+	upstreamMessage := "account acct-secret has balance 0"
+	c := newErrorTestContext(t)
+	echoed := types.NewError(
+		errors.New(upstreamMessage),
+		types.ErrorCodeGetChannelFailed,
+		types.ErrOptionWithStatusCode(http.StatusBadGateway),
+		types.ErrOptionWithSkipRetry(),
+	)
+	// The breaker replay path pins the verbatim text before the relay exit runs.
+	echoed.SetClientMessage(StandardUpstreamMessage(c, http.StatusBadGateway))
+
+	StandardizeUpstreamError(c, echoed)
+
+	require.Equal(t, StandardUpstreamMessage(c, http.StatusBadGateway), echoed.ToOpenAIError().Message)
+	require.NotContains(t, echoed.ToOpenAIError().Message, "acct-secret")
+	// Err keeps the verbatim upstream text for the request's error log.
+	require.Contains(t, echoed.Err.Error(), upstreamMessage)
 }
 
 func TestRelayErrorHandlerKeepsVerbatimErrorForAdminAndRoot(t *testing.T) {

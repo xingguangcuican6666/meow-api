@@ -188,3 +188,54 @@ func TestUpdateChannelStatusRepairsStaleAbilitiesOnIdempotentDisable(t *testing.
 	require.NoError(t, DB.Where("channel_id = ?", channel.Id).First(&stored).Error)
 	assert.False(t, stored.Enabled)
 }
+
+// Channel model and group lists are stored as comma-separated text but indexed
+// verbatim by the abilities table and the memory cache, so an untrimmed entry
+// makes a channel unroutable for that name. Selection looks them up with the
+// name the client sent, so both sides must agree on the trimmed form.
+func TestAbilityRowsUseTrimmedModelAndGroupNames(t *testing.T) {
+	setupChannelStatusTest(t)
+
+	channel := Channel{
+		Name:   "untrimmed-lists",
+		Key:    "key",
+		Status: common.ChannelStatusEnabled,
+		Models: "alpha, beta ,  gamma",
+		Group:  "default, vip",
+	}
+	require.NoError(t, DB.Create(&channel).Error)
+	require.NoError(t, channel.UpdateAbilities(nil))
+
+	var abilities []Ability
+	require.NoError(t, DB.Where("channel_id = ?", channel.Id).Order("`group`, model").Find(&abilities).Error)
+
+	var got []string
+	for _, ability := range abilities {
+		got = append(got, ability.Group+"|"+ability.Model)
+	}
+	assert.Equal(t, []string{
+		"default|alpha",
+		"default|beta",
+		"default|gamma",
+		"vip|alpha",
+		"vip|beta",
+		"vip|gamma",
+	}, got)
+
+	// Each name must resolve back to the channel on the DB selection path.
+	for _, modelName := range []string{"alpha", "beta", "gamma"} {
+		for _, group := range []string{"default", "vip"} {
+			selected, err := GetChannel([]string{group}, modelName, 0, nil)
+			require.NoError(t, err, "group=%s model=%s", group, modelName)
+			require.NotNil(t, selected, "group=%s model=%s must resolve to the channel", group, modelName)
+			assert.Equal(t, channel.Id, selected.Id)
+		}
+	}
+}
+
+func TestGetModelsAndGetGroupsDropEmptyEntries(t *testing.T) {
+	channel := Channel{Models: "alpha,,beta, ", Group: ",default,,vip,"}
+
+	assert.Equal(t, []string{"alpha", "beta"}, channel.GetModels())
+	assert.Equal(t, []string{"default", "vip"}, channel.GetGroups())
+}

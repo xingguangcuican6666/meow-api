@@ -294,11 +294,19 @@ func (channel *Channel) SaveChannelInfo() error {
 	return DB.Model(channel).Update("channel_info", channel.ChannelInfo).Error
 }
 
+// GetModels returns the channel's comma-separated model names, trimmed. The
+// trim matters because both the abilities table and the memory-cache index are
+// keyed by these exact strings while selection looks them up with the name the
+// client sent, so an untrimmed " beta" would never match a request for "beta".
 func (channel *Channel) GetModels() []string {
 	if channel.Models == "" {
 		return []string{}
 	}
-	return strings.Split(strings.Trim(channel.Models, ","), ",")
+	models := strings.Split(strings.Trim(channel.Models, ","), ",")
+	for i, model := range models {
+		models[i] = strings.TrimSpace(model)
+	}
+	return lo.Filter(models, func(model string, _ int) bool { return model != "" })
 }
 
 func (channel *Channel) GetGroups() []string {
@@ -309,7 +317,7 @@ func (channel *Channel) GetGroups() []string {
 	for i, group := range groups {
 		groups[i] = strings.TrimSpace(group)
 	}
-	return groups
+	return lo.Filter(groups, func(group string, _ int) bool { return group != "" })
 }
 
 func (channel *Channel) GetOtherInfo() map[string]any {

@@ -238,6 +238,11 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 		if info == nil && modelName != "" {
 			info = &relaycommon.RelayInfo{OriginModelName: modelName, UsingGroup: common.GetContextKeyString(c, appconstant.ContextKeyUsingGroup), StartTime: started}
 		}
+		// This is the WebSocket counterpart of the HTTP relay exit, which
+		// standardizes the client-facing text of upstream-origin errors before
+		// projection. Without it the verbatim upstream message taken from a
+		// response.failed / error frame would reach non-admin callers.
+		service.StandardizeUpstreamError(c, apiErr)
 		perfmetrics.RecordRelayResult(c.Request.Context(), info, apiErr)
 		// Settlement already marks the request policy successful, and nothing
 		// reads a termination decision after this point on the WebSocket path,

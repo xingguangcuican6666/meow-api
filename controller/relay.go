@@ -408,13 +408,21 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		if errors.Is(err, model.ErrUserChannelsExhausted) {
 			// All remaining candidate channels are excluded for this user; the
 			// request cannot be served, so echo the episode's first failure.
+			// That text is upstream-provided and rides out under the local
+			// ErrorCodeGetChannelFailed code, which the standardization allowlist
+			// keeps verbatim, so pin the fixed phrasing here instead. Err stays
+			// verbatim for this request's log.
 			if _, message, ok := service.FirstUserChannelFailure(c.GetInt("id")); ok {
-				return nil, types.NewError(
+				echoed := types.NewError(
 					errors.New(message),
 					types.ErrorCodeGetChannelFailed,
 					types.ErrOptionWithStatusCode(http.StatusBadGateway),
 					types.ErrOptionWithSkipRetry(),
 				)
+				if service.ShouldSanitizeUpstreamForClient(c) {
+					echoed.SetClientMessage(service.StandardUpstreamMessage(c, echoed.StatusCode))
+				}
+				return nil, echoed
 			}
 		}
 		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())

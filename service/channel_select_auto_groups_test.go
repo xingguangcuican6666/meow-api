@@ -326,6 +326,72 @@ func TestCacheGetRandomSatisfiedChannelSkipsSoleOperatorOutsideGroupPool(t *test
 	assert.Equal(t, "default", selectGroup)
 }
 
+// Channels store models and groups as comma-separated text typed by hand, so a
+// stray space after a comma used to end up inside the abilities rows and the
+// memory-cache index, where the exact name the client sent can never match it.
+// The whole selection pipeline must therefore key on the trimmed names.
+func TestCacheGetRandomSatisfiedChannelMatchesTrimmedModelAndGroupNames(t *testing.T) {
+	db := setupChannelSelectAutoGroupsTest(t)
+	setupModelOperatorSetting(t)
+	const modelName = "trimmed-name-model"
+
+	createUntrimmedChannel := func(id int, priority int64, weight uint, groups string) {
+		t.Helper()
+		require.NoError(t, db.Create(&model.Channel{
+			Id:       id,
+			Type:     constant.ChannelTypeOpenAI,
+			Key:      fmt.Sprintf("key-%d", id),
+			Status:   common.ChannelStatusEnabled,
+			Name:     fmt.Sprintf("untrimmed-channel-%d", id),
+			Weight:   &weight,
+			Models:   "trimmed-name-model , pad-model ",
+			Group:    groups,
+			Priority: &priority,
+		}).Error)
+		channel, err := model.GetChannelById(id, true)
+		require.NoError(t, err)
+		require.NoError(t, channel.UpdateAbilities(nil))
+	}
+
+	// Two groups written with a leading space each, plus a model list with a
+	// trailing space on the name the client asks for.
+	createUntrimmedChannel(2701, 10, 100, "default")
+	createUntrimmedChannel(2702, 0, 100, " vip")
+	model.InitChannelCache()
+
+	gin.SetMode(gin.TestMode)
+	newParam := func(group string) *RetryParam {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+		retry := 0
+		return &RetryParam{
+			Ctx:         ctx,
+			TokenGroup:  group,
+			ModelName:   modelName,
+			RequestPath: "/v1/chat/completions",
+			Retry:       &retry,
+		}
+	}
+
+	// The trimmed group name resolves to its own channel on the cache path.
+	for _, group := range []string{"default", "vip"} {
+		channel, selectGroup, err := CacheGetRandomSatisfiedChannel(newParam(group))
+		require.NoError(t, err, "group=%s", group)
+		require.NotNil(t, channel, "group=%s must resolve through the trimmed names", group)
+		assert.Equal(t, group, selectGroup)
+	}
+
+	// The sole-operator gate looks the pinned channel up by exact group and model
+	// before default routing runs, so an untrimmed row made the mapping silently
+	// miss. The vip channel outranks nothing here, so pinning it must still win.
+	setModelOperator(t, map[string]int{modelName: 2702})
+	channel, selectGroup, err := CacheGetRandomSatisfiedChannel(newParam("vip"))
+	require.NoError(t, err)
+	require.NotNil(t, channel)
+	assert.Equal(t, 2702, channel.Id)
+	assert.Equal(t, "vip", selectGroup)
+}
+
 func TestCacheGetRandomSatisfiedChannelIgnoresOperatorForUnmappedModel(t *testing.T) {
 	db := setupChannelSelectAutoGroupsTest(t)
 	setupModelOperatorSetting(t)

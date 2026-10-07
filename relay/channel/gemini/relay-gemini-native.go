@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,6 +47,20 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 	// 计算使用量（优先上游 UsageMetadata，缺失时本地估算并保留 Gemini 计费语义）
 	usage := buildUsageFromGeminiResponse(c, info, &geminiResponse)
 
+	// An upstream may answer 200 with an error object instead of a generation
+	// result. Returning it here keeps it on the NewAPIError path, where the
+	// relay exit standardizes the client-facing text; passing the body straight
+	// through would hand the verbatim upstream error to the client. A body that
+	// also carries candidates is a normal generation, so only the error-object
+	// shapes count as failures.
+	if len(geminiResponse.Candidates) == 0 && gjson.GetBytes(responseBody, "error").Exists() {
+		message := gjson.GetBytes(responseBody, "error.message").String()
+		if message == "" {
+			message = "upstream returned an error without a message"
+		}
+		return nil, types.NewOpenAIError(errors.New(message), types.ErrorCodeBadResponse, http.StatusInternalServerError)
+	}
+
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 
 	return &usage, nil
@@ -75,6 +90,17 @@ func NativeGeminiEmbeddingHandler(c *gin.Context, resp *http.Response, info *rel
 		if err != nil {
 			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 		}
+	}
+
+	// Same 200-with-an-error-object case as the chat handler: unmarshalling
+	// succeeds because the error object is simply an unknown field, so the
+	// verbatim upstream error would otherwise reach the client untouched.
+	if gjson.GetBytes(responseBody, "error").Exists() {
+		message := gjson.GetBytes(responseBody, "error.message").String()
+		if message == "" {
+			message = "upstream returned an error without a message"
+		}
+		return nil, types.NewOpenAIError(errors.New(message), types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)

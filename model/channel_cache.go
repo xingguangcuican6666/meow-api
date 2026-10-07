@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"slices"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -57,8 +56,9 @@ func InitChannelCache() {
 		if channel.Status != common.ChannelStatusEnabled {
 			continue // skip disabled channels
 		}
-		groups := strings.SplitSeq(channel.Group, ",")
-		for group := range groups {
+		// Group keys must match the abilities rows exactly (and therefore the
+		// trimmed channel values), or selection by group would never find them.
+		for _, group := range channel.GetGroups() {
 			models := channel.GetModels()
 			for _, model := range models {
 				if _, ok := newGroup2model2channels[group][model]; !ok {

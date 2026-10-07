@@ -418,6 +418,13 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 
 		service.ResetStatusCode(newAPIError, c.GetString("status_code_mapping"))
 
+		// Writing the error in the handler skips the relay exit, so the
+		// upstream block reason would reach non-admin callers verbatim. Apply
+		// the same standardization the exit applies, before projecting. Returning
+		// the error instead would also turn this into a retry across channels,
+		// which an empty upstream response did not used to trigger.
+		service.StandardizeUpstreamError(c, newAPIError)
+
 		switch info.RelayFormat {
 		case types.RelayFormatClaude:
 			c.JSON(newAPIError.StatusCode, gin.H{
