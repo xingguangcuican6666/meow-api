@@ -3,8 +3,11 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -17,7 +20,9 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/bytedance/gopkg/util/gopool"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1039,5 +1044,164 @@ func TestUpdateBatchTasksPollClassification(t *testing.T) {
 				assert.Equal(t, initialQuota, getUserQuota(t, userID))
 			}
 		})
+	}
+}
+
+func setUpstreamErrorSanitizer(t *testing.T, enabled bool) {
+	t.Helper()
+	previous := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = enabled
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = previous })
+}
+
+const taskFailUpstreamSecret = "account acct-secret-77 on https://api.vendor.example/v1 has balance 0"
+
+func TestTaskFailReasonForClient(t *testing.T) {
+	failed := func(reason string) *model.Task {
+		return &model.Task{Status: model.TaskStatusFailure, FailReason: reason}
+	}
+	localReasons := []string{
+		fmt.Sprintf("任务超时（%d分钟）", 1440),
+		"任务超时（旧系统遗留任务，不进行退款，请联系管理员）",
+		"upstream task not found (HTTP 404)",
+		pollFailureReason(pollClassAuth, http.StatusUnauthorized, ""),
+		pollFailureReason(pollClassTransient, http.StatusTooManyRequests, ""),
+		pollFailureReason(pollClassTransport, 0, ""),
+		"获取渠道信息失败，请联系管理员，渠道ID：12",
+		"Failed to get channel info, channel ID: 12",
+	}
+	upstreamReasons := []string{
+		taskFailUpstreamSecret,
+		pollFailureReason(pollClassUnrecognized, http.StatusOK, "body="+taskFailUpstreamSecret),
+		pollFailureReason(pollClassHookError, http.StatusOK, taskFailUpstreamSecret),
+		pollFailureReason(pollClassTransport, 0, `Post "https://api.vendor.example/v1/q": dial tcp 10.0.0.9:443: connection refused`),
+		// A local shape followed by extra text is still upstream text.
+		pollFailureReason(pollClassAuth, http.StatusUnauthorized, "") + ": " + taskFailUpstreamSecret,
+		"任务超时（5分钟）: " + taskFailUpstreamSecret,
+		"Failed to get channel info, channel ID: 12\n" + taskFailUpstreamSecret,
+	}
+
+	t.Run("sanitizer on keeps local reasons and standardizes upstream text", func(t *testing.T) {
+		setUpstreamErrorSanitizer(t, true)
+		for _, reason := range localReasons {
+			assert.Equal(t, reason, TaskFailReasonForClient(nil, failed(reason)))
+		}
+		for _, reason := range upstreamReasons {
+			got := TaskFailReasonForClient(nil, failed(reason))
+			assert.Equal(t, StandardUpstreamMessage(nil, 0), got, reason)
+			assert.NotContains(t, got, "acct-secret-77")
+			assert.NotContains(t, got, "vendor.example")
+		}
+	})
+
+	t.Run("standard message carries the request id", func(t *testing.T) {
+		setUpstreamErrorSanitizer(t, true)
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Set(common.RequestIdKey, "req-fail-1")
+		got := TaskFailReasonForClient(c, failed(taskFailUpstreamSecret))
+		assert.Contains(t, got, "req-fail-1")
+		assert.NotContains(t, got, "acct-secret-77")
+	})
+
+	t.Run("sanitizer off keeps every reason verbatim", func(t *testing.T) {
+		setUpstreamErrorSanitizer(t, false)
+		for _, reason := range append(localReasons, upstreamReasons...) {
+			assert.Equal(t, reason, TaskFailReasonForClient(nil, failed(reason)))
+		}
+	})
+
+	t.Run("only a failed task has its reason projected", func(t *testing.T) {
+		setUpstreamErrorSanitizer(t, true)
+		inProgress := &model.Task{Status: model.TaskStatusInProgress, FailReason: taskFailUpstreamSecret}
+		assert.Equal(t, taskFailUpstreamSecret, TaskFailReasonForClient(nil, inProgress))
+		assert.Empty(t, TaskFailReasonForClient(nil, failed("")))
+	})
+
+	t.Run("administrators read the stored reason", func(t *testing.T) {
+		setUpstreamErrorSanitizer(t, true)
+		truncate(t)
+		admin := &model.User{Id: 9101, Username: "fail_reason_admin", Role: common.RoleAdminUser, Status: common.UserStatusEnabled, AffCode: "fail-reason-admin"}
+		require.NoError(t, model.DB.Create(admin).Error)
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Set("id", admin.Id)
+		assert.Equal(t, taskFailUpstreamSecret, TaskFailReasonForClient(c, failed(taskFailUpstreamSecret)))
+	})
+}
+
+func TestPollFailureKeepsVerbatimReasonAndProjectsRefundLog(t *testing.T) {
+	testCases := []struct {
+		name         string
+		statusCode   int
+		parse        *relaycommon.TaskInfo
+		parseErr     error
+		maxFailures  int
+		wantStored   string
+		wantLogLocal bool
+	}{
+		{
+			name:       "terminal failure reported by the upstream",
+			statusCode: http.StatusOK,
+			parse:      &relaycommon.TaskInfo{Status: model.TaskStatusFailure, Reason: taskFailUpstreamSecret},
+			wantStored: taskFailUpstreamSecret,
+		},
+		{
+			name:        "consecutive failure threshold with an upstream-derived detail",
+			statusCode:  http.StatusOK,
+			parseErr:    errors.New(taskFailUpstreamSecret),
+			maxFailures: 1,
+			wantStored:  pollFailureReason(pollClassHookError, http.StatusOK, taskFailUpstreamSecret),
+		},
+		{
+			name:         "host-authored not-found verdict stays readable",
+			statusCode:   http.StatusNotFound,
+			wantStored:   "upstream task not found (HTTP 404)",
+			wantLogLocal: true,
+		},
+	}
+	for _, testCase := range testCases {
+		for _, sanitize := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/sanitize=%t", testCase.name, sanitize), func(t *testing.T) {
+				truncate(t)
+				setUpstreamErrorSanitizer(t, sanitize)
+				const userID, tokenID, channelID = 520, 520, 520
+				const initialQuota, preConsumed, tokenRemain = 10_000, 4_000, 7_000
+				seedUser(t, userID, initialQuota)
+				seedToken(t, tokenID, userID, "sk-poll-reason", tokenRemain)
+				ch := &model.Channel{Id: channelID, Type: constant.ChannelTypeKling, Name: "poll", Key: "sk-test", Status: common.ChannelStatusEnabled}
+				if testCase.maxFailures > 0 {
+					previous := constant.TaskPollMaxFailures
+					constant.TaskPollMaxFailures = testCase.maxFailures
+					t.Cleanup(func() { constant.TaskPollMaxFailures = previous })
+				}
+				task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+				task.TaskID = "task_poll_reason"
+				task.PrivateData.UpstreamTaskID = "upstream_poll_reason"
+				require.NoError(t, model.DB.Create(task).Error)
+
+				adaptor := &scriptedPollingAdaptor{statusCode: testCase.statusCode, parse: testCase.parse, parseErr: testCase.parseErr}
+				require.NoError(t, updateVideoSingleTask(context.Background(), adaptor, ch, task.GetUpstreamTaskID(), map[string]*model.Task{
+					task.GetUpstreamTaskID(): task,
+				}))
+
+				// The stored reason is never rewritten: administrators need it.
+				var persisted model.Task
+				require.NoError(t, model.DB.First(&persisted, task.ID).Error)
+				assert.EqualValues(t, model.TaskStatusFailure, persisted.Status)
+				assert.Equal(t, testCase.wantStored, persisted.FailReason)
+
+				// The refund log reason is user-visible.
+				log := getLastLog(t)
+				require.NotNil(t, log)
+				require.Equal(t, model.LogTypeRefund, log.Type)
+				var other map[string]any
+				require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
+				if sanitize && !testCase.wantLogLocal {
+					assert.Equal(t, StandardUpstreamMessage(nil, 0), other["reason"])
+					assert.NotContains(t, log.Other, "acct-secret-77")
+				} else {
+					assert.Equal(t, testCase.wantStored, other["reason"])
+				}
+			})
+		}
 	}
 }

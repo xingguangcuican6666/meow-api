@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 
 	"github.com/bytedance/gopkg/util/gopool"
+	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
 )
 
@@ -627,7 +629,9 @@ func finalizeTerminalTask(ctx context.Context, adaptor TaskPollingAdaptor, task 
 	perfmetrics.RecordTaskResult(task, taskResult)
 	billingSettled := settleTaskBillingOnComplete(ctx, adaptor, task, taskResult)
 	if task.Status == model.TaskStatusFailure && !billingSettled && task.Quota != 0 {
-		RefundTaskQuota(ctx, task, task.FailReason)
+		// The refund log reason is shown to the log owner, so it carries the client
+		// projection of the failure, not the stored upstream text.
+		RefundTaskQuota(ctx, task, TaskFailReasonForClient(nil, task))
 	}
 }
 
@@ -754,6 +758,42 @@ func pollFailureReason(class string, statusCode int, detail string) string {
 		reason = reason + ": " + detail
 	}
 	return reason
+}
+
+// localTaskFailReasonPattern matches the failure reasons this service authors
+// itself and that embed no upstream text: the timeout sweeps, the 404/410 poll
+// verdict, threshold failures that carry only a class and an HTTP status, and
+// the channel lookup failure. Everything else stored in Task.FailReason (a
+// provider's or plugin's reason, a transport error, a response body excerpt)
+// is upstream-derived. The allowlist is closed on purpose: a writer added later
+// fails closed instead of leaking until someone remembers to list it.
+var localTaskFailReasonPattern = regexp.MustCompile("^(?:" + strings.Join([]string{
+	`任务超时（\d+分钟）`,
+	`任务超时（旧系统遗留任务，不进行退款，请联系管理员）`,
+	`upstream task not found \(HTTP \d{3}\)`,
+	`获取渠道信息失败，请联系管理员，渠道ID：\d+`,
+	`Failed to get channel info, channel ID: \d+`,
+	"poll failed: (?:" + strings.Join([]string{
+		pollClassOtherClient, pollClassNotFound, pollClassAuth, pollClassTransient,
+		pollClassUnrecognized, pollClassHookError, pollClassTransport,
+	}, "|") + `)(?: \(HTTP \d{3}\))?`,
+}, "|") + ")$")
+
+// TaskFailReasonForClient returns the failure reason a task holder may read.
+// Task.FailReason is stored verbatim because administrators need the real
+// cause; this projection is applied wherever it is shown to an API client. When
+// upstream error sanitization applies to the caller, a failed task whose reason
+// is not one of this service's own texts gets the standardized upstream message
+// instead. c may be nil for audiences with no caller, which counts as a
+// non-administrator.
+func TaskFailReasonForClient(c *gin.Context, task *model.Task) string {
+	reason := task.FailReason
+	if reason == "" || task.Status != model.TaskStatusFailure ||
+		localTaskFailReasonPattern.MatchString(reason) || !ShouldSanitizeUpstreamForClient(c) {
+		return reason
+	}
+	// The stored text carries no HTTP status, so the generic phrasing applies.
+	return StandardUpstreamMessage(c, 0)
 }
 
 // unrecognizedPollDetail pairs the plugin's reason with a bounded copy of the

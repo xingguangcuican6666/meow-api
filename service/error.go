@@ -212,7 +212,10 @@ func StandardizeUpstreamError(c *gin.Context, e *types.NewAPIError) {
 		return
 	}
 	code := e.GetErrorCode()
-	if isLocalActionableErrorCode(code) {
+	// Provenance gates the allowlist: an error wrapped from an upstream
+	// response (WithOpenAIError/WithClaudeError) carries a code the upstream
+	// chose, so it must never match a local code and skip sanitization.
+	if e.IsLocalError() && isLocalActionableErrorCode(code) {
 		return
 	}
 	if isContentSafetyErrorCode(code) {
@@ -225,14 +228,15 @@ func StandardizeUpstreamError(c *gin.Context, e *types.NewAPIError) {
 // StandardizeUpstreamTaskError applies the same standardization to a Task
 // error's client-facing Message. Task/Midjourney paths carry their own
 // TaskError/MidjourneyResponse types instead of NewAPIError, so they share the
-// phrasing through this helper rather than through clientMessage. Locally
-// authored errors (LocalError set, or a local actionable code) are left
-// verbatim. Returns whether the message was replaced.
+// phrasing through this helper rather than through clientMessage. Only errors
+// their author marked LocalError are left verbatim; the code is caller-chosen
+// text and never grants that status by itself. Returns whether the message was
+// replaced.
 func StandardizeUpstreamTaskError(c *gin.Context, taskErr *taskdto.TaskError) bool {
 	if taskErr == nil || taskErr.StatusCode < http.StatusBadRequest {
 		return false
 	}
-	if taskErr.LocalError || isLocalActionableErrorCode(types.ErrorCode(taskErr.Code)) {
+	if taskErr.LocalError {
 		return false
 	}
 	if !ShouldSanitizeUpstreamForClient(c) {
@@ -393,6 +397,7 @@ func TaskErrorFromAPIError(apiErr *types.NewAPIError) *taskdto.TaskError {
 		Code:       string(apiErr.GetErrorCode()),
 		Message:    apiErr.Err.Error(),
 		StatusCode: apiErr.StatusCode,
+		LocalError: apiErr.IsLocalError(),
 		Error:      apiErr.Err,
 	}
 }

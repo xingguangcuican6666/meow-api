@@ -658,3 +658,61 @@ func TestExecuteTaskSubmissionRefundsWhenFinalReserveFails(t *testing.T) {
 	assert.Equal(t, 1, billing.refunds)
 	assert.False(t, c.Writer.Written())
 }
+
+// Echoing the first failure of an exhausted channel pool carries upstream text
+// under a local error code. The task response must carry the pinned standard
+// phrasing for ordinary callers while the error log keeps the verbatim text.
+func TestExecuteTaskSubmissionPinsStandardMessageWhenChannelsAreExhausted(t *testing.T) {
+	const userID, channelID = 940001, 940001
+	for _, sanitize := range []bool{true, false} {
+		t.Run(fmt.Sprintf("sanitize=%t", sanitize), func(t *testing.T) {
+			setUpstreamErrorSanitizer(t, sanitize)
+			database, _ := openTaskDialectDatabase(t, &model.Channel{}, &model.Ability{})
+			previousDB, previousCache := model.DB, common.MemoryCacheEnabled
+			model.DB, common.MemoryCacheEnabled = database, true
+			t.Cleanup(func() {
+				service.ResetUserChannelFailures(userID, channelID)
+				model.DB, common.MemoryCacheEnabled = previousDB, previousCache
+			})
+			require.NoError(t, database.Create(&model.Channel{
+				Id: channelID, Type: constant.ChannelTypeOpenAI, Name: "exhausted", Key: "sk-exhausted",
+				Status: common.ChannelStatusEnabled, Group: "default", Models: "exhausted-model",
+			}).Error)
+			model.InitChannelCache()
+			for range 6 {
+				service.RecordUserChannelFailure(userID, channelID, "upstream_error", taskFailUpstreamSecret)
+			}
+
+			c := taskSubmissionTestContext()
+			c.Set("id", userID)
+			c.Set(common.RequestIdKey, "req-exhausted-1")
+			info := &relaycommon.RelayInfo{
+				UserId:          userID,
+				TokenGroup:      "default",
+				UsingGroup:      "default",
+				OriginModelName: "exhausted-model",
+				TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_exhausted"},
+				ChannelMeta:     &relaycommon.ChannelMeta{},
+			}
+			submitted := false
+			outcome, taskErr := executeTaskSubmissionWith(c, info, func(*gin.Context, *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+				submitted = true
+				return nil, nil
+			})
+
+			assert.False(t, submitted)
+			assert.Nil(t, outcome)
+			require.NotNil(t, taskErr)
+			assert.Equal(t, "get_channel_failed", taskErr.Code)
+			assert.Equal(t, http.StatusBadGateway, taskErr.StatusCode)
+			assert.True(t, taskErr.LocalError)
+			if sanitize {
+				assert.Equal(t, service.StandardUpstreamMessage(c, http.StatusBadGateway), taskErr.Message)
+				assert.NotContains(t, taskErr.Message, "acct-secret-77")
+				assert.NotContains(t, taskErr.Message, "vendor.example")
+			} else {
+				assert.Contains(t, taskErr.Message, "acct-secret-77")
+			}
+		})
+	}
+}

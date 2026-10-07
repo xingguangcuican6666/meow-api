@@ -56,15 +56,22 @@ func InitChannelCache() {
 		if channel.Status != common.ChannelStatusEnabled {
 			continue // skip disabled channels
 		}
-		// Group keys must match the abilities rows exactly (and therefore the
-		// trimmed channel values), or selection by group would never find them.
+		// Use the same accessors as the ability rows so the index keys are the
+		// trimmed group and model names the request path looks up. The group map
+		// is created on demand: a channel whose groups have no ability rows yet
+		// (stale or legacy data) must not panic the whole cache rebuild.
+		models := channel.GetModels()
 		for _, group := range channel.GetGroups() {
-			models := channel.GetModels()
+			model2channels, ok := newGroup2model2channels[group]
+			if !ok {
+				model2channels = make(map[string][]int)
+				newGroup2model2channels[group] = model2channels
+			}
 			for _, model := range models {
-				if _, ok := newGroup2model2channels[group][model]; !ok {
-					newGroup2model2channels[group][model] = make([]int, 0)
+				if _, ok := model2channels[model]; !ok {
+					model2channels[model] = make([]int, 0)
 				}
-				newGroup2model2channels[group][model] = append(newGroup2model2channels[group][model], channel.Id)
+				model2channels[model] = append(model2channels[model], channel.Id)
 			}
 		}
 	}

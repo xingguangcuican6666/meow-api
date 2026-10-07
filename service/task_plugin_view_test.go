@@ -83,3 +83,24 @@ func TestBuildTaskPluginViewOmitsPrivatePollState(t *testing.T) {
 	assert.NotContains(t, payload, "poll_failures")
 	assert.NotContains(t, payload, "private_data")
 }
+
+func TestBuildTaskPluginViewProjectsUpstreamFailReason(t *testing.T) {
+	failed := func(reason string) *model.Task {
+		return &model.Task{TaskID: "task_view_fail", Status: model.TaskStatusFailure, FailReason: reason}
+	}
+
+	setUpstreamErrorSanitizer(t, true)
+	view, err := BuildTaskPluginView(failed(taskFailUpstreamSecret))
+	require.NoError(t, err)
+	assert.Equal(t, StandardUpstreamMessage(nil, 0), view.FailReason)
+	assert.NotContains(t, view.FailReason, "acct-secret-77")
+
+	view, err = BuildTaskPluginView(failed("任务超时（5分钟）"))
+	require.NoError(t, err)
+	assert.Equal(t, "任务超时（5分钟）", view.FailReason)
+
+	setUpstreamErrorSanitizer(t, false)
+	view, err = BuildTaskPluginView(failed(taskFailUpstreamSecret))
+	require.NoError(t, err)
+	assert.Equal(t, taskFailUpstreamSecret, view.FailReason)
+}

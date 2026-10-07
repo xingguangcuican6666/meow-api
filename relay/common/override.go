@@ -131,7 +131,9 @@ func NewAPIErrorFromParamOverride(err *ParamOverrideReturnError) *types.NewAPIEr
 		message = "request blocked by param override"
 	}
 
-	opts := make([]types.NewAPIErrorOptions, 0, 1)
+	// The message is written by the administrator in the override rule and is
+	// meant for the client, so it must not be replaced by the upstream phrasing.
+	opts := []types.NewAPIErrorOptions{types.ErrOptionAsLocalError()}
 	if err.SkipRetry {
 		opts = append(opts, types.ErrOptionWithSkipRetry())
 	}

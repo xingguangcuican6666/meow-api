@@ -6,6 +6,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -167,4 +168,41 @@ func TestTaskLogDTOHidesUpstreamModelMappingUnderPrivacyProtection(t *testing.T)
 	openJSON, err := common.Marshal(tasksToDto([]*model.Task{task}, false, common.RoleCommonUser)[0])
 	require.NoError(t, err)
 	assert.Contains(t, string(openJSON), "upstream-secret-model")
+}
+
+func setUpstreamErrorSanitizer(t *testing.T, enabled bool) {
+	t.Helper()
+	previous := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = enabled
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = previous })
+}
+
+const taskFailUpstreamSecret = "account acct-secret-77 on https://api.vendor.example/v1 has balance 0"
+
+func TestTaskLogDTOProjectsUpstreamFailReasonForNonAdmins(t *testing.T) {
+	failed := func(reason string) *model.Task {
+		return &model.Task{TaskID: "task_failed_secret", Platform: "kling", Status: model.TaskStatusFailure, FailReason: reason}
+	}
+
+	setUpstreamErrorSanitizer(t, true)
+	userView := tasksToDto([]*model.Task{failed(taskFailUpstreamSecret)}, false, common.RoleCommonUser)[0]
+	assert.Equal(t, service.StandardUpstreamMessage(nil, 0), userView.FailReason)
+	// result_url falls back to FailReason for legacy rows; it must not echo it.
+	assert.Empty(t, userView.ResultURL)
+	userJSON, err := common.Marshal(userView)
+	require.NoError(t, err)
+	assert.NotContains(t, string(userJSON), "acct-secret-77")
+	assert.NotContains(t, string(userJSON), "vendor.example")
+
+	for _, role := range []int{common.RoleAdminUser, common.RoleRootUser} {
+		adminView := tasksToDto([]*model.Task{failed(taskFailUpstreamSecret)}, false, role)[0]
+		assert.Equal(t, taskFailUpstreamSecret, adminView.FailReason)
+	}
+
+	localView := tasksToDto([]*model.Task{failed("任务超时（5分钟）")}, false, common.RoleCommonUser)[0]
+	assert.Equal(t, "任务超时（5分钟）", localView.FailReason)
+
+	setUpstreamErrorSanitizer(t, false)
+	openView := tasksToDto([]*model.Task{failed(taskFailUpstreamSecret)}, false, common.RoleCommonUser)[0]
+	assert.Equal(t, taskFailUpstreamSecret, openView.FailReason)
 }

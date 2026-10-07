@@ -30,6 +30,7 @@ import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authentica
 import { Route as AuthenticatedOauthConsentRouteImport } from './routes/_authenticated/oauth-consent'
 import { Route as AuthenticatedSystemSettingsRouteRouteImport } from './routes/_authenticated/system-settings/route'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
+import { Route as CustomItemIdRouteImport } from './routes/custom/$itemId'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
 import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as RankingsIndexRouteImport } from './routes/rankings/index'
@@ -178,6 +179,11 @@ const AuthenticatedSystemSettingsRouteRoute =
 const AboutIndexRoute = AboutIndexRouteImport.update({
   id: '/about/',
   path: '/about/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomItemIdRoute = CustomItemIdRouteImport.update({
+  id: '/custom/$itemId',
+  path: '/custom/$itemId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OauthProviderRoute = OauthProviderRouteImport.update({
@@ -455,6 +461,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/oauth-consent': typeof AuthenticatedOauthConsentRoute
+  '/custom/$itemId': typeof CustomItemIdRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -519,6 +526,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/oauth-consent': typeof AuthenticatedOauthConsentRoute
+  '/custom/$itemId': typeof CustomItemIdRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about': typeof AboutIndexRoute
   '/pricing': typeof PricingIndexRoute
@@ -587,6 +595,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
   '/_authenticated/oauth-consent': typeof AuthenticatedOauthConsentRoute
+  '/custom/$itemId': typeof CustomItemIdRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
   '/pricing/': typeof PricingIndexRoute
@@ -654,6 +663,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/chat2link'
     | '/oauth-consent'
+    | '/custom/$itemId'
     | '/oauth/$provider'
     | '/about/'
     | '/pricing/'
@@ -718,6 +728,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/chat2link'
     | '/oauth-consent'
+    | '/custom/$itemId'
     | '/oauth/$provider'
     | '/about'
     | '/pricing'
@@ -785,6 +796,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/chat2link'
     | '/_authenticated/oauth-consent'
+    | '/custom/$itemId'
     | '/oauth/$provider'
     | '/about/'
     | '/pricing/'
@@ -843,6 +855,7 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  CustomItemIdRoute: typeof CustomItemIdRoute
   OauthProviderRoute: typeof OauthProviderRoute
   AboutIndexRoute: typeof AboutIndexRoute
   PricingIndexRoute: typeof PricingIndexRoute
@@ -998,6 +1011,13 @@ declare module '@tanstack/react-router' {
       path: '/about'
       fullPath: '/about/'
       preLoaderRoute: typeof AboutIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/custom/$itemId': {
+      id: '/custom/$itemId'
+      path: '/custom/$itemId'
+      fullPath: '/custom/$itemId'
+      preLoaderRoute: typeof CustomItemIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/oauth/$provider': {
@@ -1470,6 +1490,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  CustomItemIdRoute: CustomItemIdRoute,
   OauthProviderRoute: OauthProviderRoute,
   AboutIndexRoute: AboutIndexRoute,
   PricingIndexRoute: PricingIndexRoute,

@@ -490,15 +490,22 @@ func TestManageUserQuotaConcurrentSnapshots(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	user := model.User{Username: "concurrent-quota", Quota: 1000}
 	require.NoError(t, db.Create(&user).Error)
+	// Overlapping read snapshots can only be forced on databases whose
+	// transactions start deferred. SQLite runs with BEGIN IMMEDIATE (see
+	// common.SQLitePragmaQuery), so its writers queue instead and a barrier
+	// inside the first transaction would wait forever for the second.
+	forceOverlap := !common.UsingMainDatabase(common.DatabaseTypeSQLite)
 	var ready sync.WaitGroup
-	ready.Add(2)
 	release := make(chan struct{})
-	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:concurrent_quota_start", func(tx *gorm.DB) {
-		if tx.Statement.Table == "users" {
-			ready.Done()
-			<-release
-		}
-	}))
+	if forceOverlap {
+		ready.Add(2)
+		require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:concurrent_quota_start", func(tx *gorm.DB) {
+			if tx.Statement.Table == "users" {
+				ready.Done()
+				<-release
+			}
+		}))
+	}
 	type result struct {
 		adjustment *model.UserQuotaAdjustment
 		err        error
@@ -511,22 +518,21 @@ func TestManageUserQuotaConcurrentSnapshots(t *testing.T) {
 			results <- result{adjustment, err, value}
 		}(value)
 	}
-	ready.Wait()
-	close(release)
+	if forceOverlap {
+		ready.Wait()
+		close(release)
+	}
 	var committed []model.UserQuotaAdjustment
 	for range 2 {
 		result := <-results
-		if result.err != nil {
-			require.True(t, common.UsingMainDatabase(common.DatabaseTypeSQLite), "row-locking databases must serialize both adjustments: %v", result.err)
-			assert.Contains(t, strings.ToLower(result.err.Error()), "locked")
-			assert.Nil(t, result.adjustment)
-			continue
-		}
+		require.NoError(t, result.err, "both adjustments must serialize and commit")
 		require.NotNil(t, result.adjustment)
 		assert.Equal(t, result.value, result.adjustment.After-result.adjustment.Before)
 		committed = append(committed, *result.adjustment)
 	}
-	require.NoError(t, db.Callback().Query().Remove("test:concurrent_quota_start"))
+	if forceOverlap {
+		require.NoError(t, db.Callback().Query().Remove("test:concurrent_quota_start"))
+	}
 	require.NotEmpty(t, committed)
 	sort.Slice(committed, func(i, j int) bool { return committed[i].Before < committed[j].Before })
 	balance := 1000

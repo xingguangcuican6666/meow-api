@@ -11,11 +11,13 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -316,4 +318,96 @@ func TestRelayErrorHandlerKeepsStructuredErrorWhenSanitizerDisabled(t *testing.T
 	}
 	newAPIError := RelayErrorHandler(newErrorTestContext(t), resp, false)
 	require.Contains(t, newAPIError.Err.Error(), "actionable upstream detail")
+}
+
+func TestStandardizeUpstreamErrorTrustsOnlyLocalProvenance(t *testing.T) {
+	original := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = true
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = original })
+
+	tests := []struct {
+		name          string
+		err           *types.NewAPIError
+		secret        string
+		wantSanitized bool
+	}{
+		{
+			name:   "local error with an allowlisted code keeps its message",
+			err:    types.NewErrorWithStatusCode(errors.New("quota insufficient for user 123"), types.ErrorCodeInsufficientUserQuota, http.StatusPaymentRequired),
+			secret: "user 123",
+		},
+		{
+			name:          "local error with a code outside the allowlist is sanitized",
+			err:           types.NewOpenAIError(errors.New("upstream.internal.example refused the connection"), types.ErrorCodeDoRequestFailed, http.StatusBadGateway),
+			secret:        "upstream.internal.example",
+			wantSanitized: true,
+		},
+		{
+			name:          "upstream error reusing an allowlisted code is sanitized",
+			err:           types.WithOpenAIError(types.OpenAIError{Message: "account sk-SECRET balance 0", Code: "invalid_request"}, http.StatusUnauthorized),
+			secret:        "sk-SECRET",
+			wantSanitized: true,
+		},
+		{
+			name:          "upstream error reusing a channel-prefixed code is sanitized",
+			err:           types.WithOpenAIError(types.OpenAIError{Message: "account sk-SECRET balance 0", Code: string(types.ErrorCodeChannelInvalidKey)}, http.StatusForbidden),
+			secret:        "sk-SECRET",
+			wantSanitized: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newErrorTestContext(t)
+
+			StandardizeUpstreamError(c, tt.err)
+
+			assert.Contains(t, tt.err.Error(), tt.secret, "Err keeps the verbatim text for admin logs")
+			if !tt.wantSanitized {
+				assert.Empty(t, tt.err.GetClientMessage())
+				return
+			}
+			assert.Equal(t, StandardUpstreamMessage(c, tt.err.StatusCode), tt.err.GetClientMessage())
+			assert.NotContains(t, tt.err.GetClientMessage(), tt.secret)
+		})
+	}
+}
+
+func TestStandardizeUpstreamTaskErrorTrustsOnlyLocalErrors(t *testing.T) {
+	original := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = true
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = original })
+
+	tests := []struct {
+		name          string
+		taskErr       *taskdto.TaskError
+		wantSanitized bool
+	}{
+		{
+			name:    "author-marked local error keeps its message",
+			taskErr: TaskErrorWrapperLocal(errors.New("account acct-secret balance 0"), "get_channel_failed", http.StatusServiceUnavailable),
+		},
+		{
+			name:          "unmarked error reusing an allowlisted code is sanitized",
+			taskErr:       TaskErrorWrapper(errors.New("account acct-secret balance 0"), "get_channel_failed", http.StatusServiceUnavailable),
+			wantSanitized: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newErrorTestContext(t)
+
+			replaced := StandardizeUpstreamTaskError(c, tt.taskErr)
+
+			assert.Equal(t, tt.wantSanitized, replaced)
+			if !tt.wantSanitized {
+				assert.Contains(t, tt.taskErr.Message, "acct-secret")
+				return
+			}
+			assert.Equal(t, StandardUpstreamMessage(c, http.StatusServiceUnavailable), tt.taskErr.Message)
+			assert.NotContains(t, tt.taskErr.Message, "acct-secret")
+			assert.Contains(t, tt.taskErr.Error.Error(), "acct-secret", "Error keeps the verbatim text for admin logs")
+		})
+	}
 }

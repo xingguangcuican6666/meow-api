@@ -262,16 +262,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if useTiered {
 		provider, supported := adaptor.(channel.TaskUsageFactsProvider)
 		if billingexpr.UsesFixedPricing(exprStr) {
-			return nil, service.TaskErrorWrapper(fmt.Errorf("fixed pricing is not supported for task usage expressions"), "model_price_error", http.StatusBadRequest)
+			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("fixed pricing is not supported for task usage expressions"), "model_price_error", http.StatusBadRequest)
 		}
 		if !exists || !supported {
-			return nil, service.TaskErrorWrapper(fmt.Errorf("task model %s has no usage expression or meter", modelName), "model_price_error", http.StatusBadRequest)
+			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task model %s has no usage expression or meter", modelName), "model_price_error", http.StatusBadRequest)
 		}
 		sharedModel := pinnedPlugin.Generation.SharedModel(modelName) || pinnedPlugin.Generation.SharedModel(info.UpstreamModelName)
 		if sharedModel && pinnedPlugin.Plugin != nil {
 			schema, _ := pinnedPlugin.Plugin.Meta.UsageForModels(info.UpstreamModelName, modelName)
 			if !billing_setting.TaskExprCompatible(exprStr, schema) {
-				return nil, service.TaskErrorWrapper(fmt.Errorf("task model %s pricing is not configured for plugin %s", modelName, pluginKey), "model_price_error", http.StatusBadRequest)
+				return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task model %s pricing is not configured for plugin %s", modelName, pluginKey), "model_price_error", http.StatusBadRequest)
 			}
 		}
 		var facts map[string]any
@@ -288,7 +288,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 			if runErr == nil {
 				runErr = fmt.Errorf("negative task expression result")
 			}
-			return nil, service.TaskErrorWrapper(runErr, "model_price_error", http.StatusBadRequest)
+			return nil, service.TaskErrorWrapperLocal(runErr, "model_price_error", http.StatusBadRequest)
 		}
 		groupRatioInfo := helper.HandleGroupRatio(c, info)
 		quota, clamp := common.QuotaRoundChecked(cost * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
@@ -298,7 +298,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	} else {
 		priceData, err = helper.ModelPriceHelperPerCall(c, info)
 		if err != nil {
-			return nil, service.TaskErrorWrapper(err, "model_price_error", http.StatusBadRequest)
+			return nil, service.TaskErrorWrapperLocal(err, "model_price_error", http.StatusBadRequest)
 		}
 	}
 	info.PriceData = priceData
@@ -512,9 +512,16 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	}
 
 	// 通用 TaskDto 格式
+	taskDto := TaskModel2Dto(originTask, setting.UpstreamPrivacyProtectionEnabled)
+	if !service.ShouldSanitizeUpstreamForClient(c) {
+		// Administrator tokens keep the stored failure verbatim, like every other
+		// API response they receive while upstream error sanitization is on.
+		taskDto.FailReason = originTask.FailReason
+		taskDto.Data = originTask.Data
+	}
 	respBody, err = common.Marshal(dto.TaskResponse[any]{
 		Code: "success",
-		Data: TaskModel2Dto(originTask, setting.UpstreamPrivacyProtectionEnabled),
+		Data: taskDto,
 	})
 	if err != nil {
 		taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
@@ -651,6 +658,21 @@ func TaskModel2Dto(task *model.Task, hideUpstreamModel bool) *dto.TaskDto {
 	if hideUpstreamModel {
 		props.UpstreamModelName = ""
 	}
+	// The DTO is the client projection: FailReason is standardized when upstream
+	// error sanitization applies, and callers entitled to the stored text (admin
+	// views) restore it themselves.
+	failReason := service.TaskFailReasonForClient(nil, task)
+	resultURL := task.GetResultURL()
+	data := task.Data
+	if task.Status == model.TaskStatusFailure {
+		// GetResultURL falls back to FailReason for legacy rows; on a failed task
+		// that is an error text, not a URL. The snapshot of a failed task is the
+		// upstream response that carried the same text, so it goes with the reason.
+		resultURL = task.PrivateData.ResultURL
+		if failReason != task.FailReason {
+			data = nil
+		}
+	}
 	return &dto.TaskDto{
 		ID:         task.ID,
 		CreatedAt:  task.CreatedAt,
@@ -663,14 +685,14 @@ func TaskModel2Dto(task *model.Task, hideUpstreamModel bool) *dto.TaskDto {
 		Quota:      task.Quota,
 		Action:     constant.NormalizeTaskAction(task.Action),
 		Status:     string(task.Status),
-		FailReason: task.FailReason,
-		ResultURL:  task.GetResultURL(),
+		FailReason: failReason,
+		ResultURL:  resultURL,
 		SubmitTime: task.SubmitTime,
 		StartTime:  task.StartTime,
 		FinishTime: task.FinishTime,
 		Progress:   task.Progress,
 		Properties: props,
 		Username:   task.Username,
-		Data:       task.Data,
+		Data:       data,
 	}
 }

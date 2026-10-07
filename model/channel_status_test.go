@@ -239,3 +239,166 @@ func TestGetModelsAndGetGroupsDropEmptyEntries(t *testing.T) {
 	assert.Equal(t, []string{"alpha", "beta"}, channel.GetModels())
 	assert.Equal(t, []string{"default", "vip"}, channel.GetGroups())
 }
+
+const (
+	normalizationTestChannelID = 4101
+	normalizationTestTag       = "normalization-tag"
+	// Group and Models exactly as an admin form or an import can submit them:
+	// padded names, an empty segment and a trailing comma.
+	paddedChannelGroup  = " vip , default ,"
+	paddedChannelModels = " gpt-4 ,, gpt-4o, "
+)
+
+func newNormalizationTestChannel(group, models string) *Channel {
+	tag := normalizationTestTag
+	return &Channel{
+		Id:     normalizationTestChannelID,
+		Name:   "normalization-channel",
+		Key:    "key",
+		Status: common.ChannelStatusEnabled,
+		Group:  group,
+		Models: models,
+		Tag:    &tag,
+	}
+}
+
+func loadAbilityPairs(t *testing.T, channelID int) []string {
+	t.Helper()
+	var abilities []Ability
+	require.NoError(t, DB.Where("channel_id = ?", channelID).Find(&abilities).Error)
+	pairs := make([]string, 0, len(abilities))
+	for _, ability := range abilities {
+		pairs = append(pairs, ability.Group+"|"+ability.Model)
+	}
+	return pairs
+}
+
+func TestChannelGroupAndModelsAccessorsNormalizePaddedValues(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want []string
+	}{
+		{raw: "", want: []string{}},
+		{raw: "default", want: []string{"default"}},
+		{raw: "vip,default", want: []string{"vip", "default"}},
+		{raw: "gpt-4,gpt-4o-mini", want: []string{"gpt-4", "gpt-4o-mini"}},
+		{raw: paddedChannelGroup, want: []string{"vip", "default"}},
+		{raw: ",vip,,default", want: []string{"vip", "default"}},
+		{raw: " , ", want: []string{}},
+	}
+	for _, tt := range tests {
+		channel := Channel{Group: tt.raw, Models: tt.raw}
+		assert.Equal(t, tt.want, channel.GetGroups(), "groups of %q", tt.raw)
+		assert.Equal(t, tt.want, channel.GetModels(), "models of %q", tt.raw)
+	}
+
+	// Well-formed values are already canonical and must round-trip unchanged.
+	for _, raw := range []string{"default", "vip,default", "gpt-4,gpt-4o-mini"} {
+		assert.Equal(t, raw, normalizeCommaSeparated(raw))
+	}
+}
+
+func TestChannelWritePathsPersistCanonicalGroupAndModels(t *testing.T) {
+	tests := []struct {
+		name string
+		// seed stores a canonical channel first so the path edits an existing row.
+		seed bool
+		// syncsAbilities is false for Save, which persists the channel row only.
+		syncsAbilities bool
+		write          func() error
+	}{
+		{name: "Insert", syncsAbilities: true, write: func() error {
+			return newNormalizationTestChannel(paddedChannelGroup, paddedChannelModels).Insert()
+		}},
+		{name: "BatchInsertChannels", syncsAbilities: true, write: func() error {
+			return BatchInsertChannels([]Channel{*newNormalizationTestChannel(paddedChannelGroup, paddedChannelModels)})
+		}},
+		{name: "Update", seed: true, syncsAbilities: true, write: func() error {
+			return newNormalizationTestChannel(paddedChannelGroup, paddedChannelModels).Update()
+		}},
+		{name: "Save", seed: true, write: func() error {
+			return newNormalizationTestChannel(paddedChannelGroup, paddedChannelModels).Save()
+		}},
+		{name: "EditChannelByTag", seed: true, syncsAbilities: true, write: func() error {
+			group, models := paddedChannelGroup, paddedChannelModels
+			return EditChannelByTag(normalizationTestTag, nil, nil, &models, &group, nil, nil, nil, nil)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupChannelStatusTest(t)
+			if tt.seed {
+				require.NoError(t, newNormalizationTestChannel("default", "seed-model").Insert())
+			}
+			require.NoError(t, tt.write())
+
+			var stored Channel
+			require.NoError(t, DB.First(&stored, normalizationTestChannelID).Error)
+			assert.Equal(t, "vip,default", stored.Group)
+			assert.Equal(t, "gpt-4,gpt-4o", stored.Models)
+			if tt.syncsAbilities {
+				assert.ElementsMatch(t,
+					[]string{"vip|gpt-4", "vip|gpt-4o", "default|gpt-4", "default|gpt-4o"},
+					loadAbilityPairs(t, normalizationTestChannelID))
+			}
+		})
+	}
+}
+
+func TestEditChannelByTagIgnoresBlankGroupAndModels(t *testing.T) {
+	setupChannelStatusTest(t)
+	require.NoError(t, newNormalizationTestChannel("default", "seed-model").Insert())
+
+	// A value with nothing left after normalization counts as not provided;
+	// stored verbatim it would strip every channel of the tag from routing.
+	blank := " , "
+	require.NoError(t, EditChannelByTag(normalizationTestTag, nil, nil, &blank, &blank, nil, nil, nil, nil))
+
+	var stored Channel
+	require.NoError(t, DB.First(&stored, normalizationTestChannelID).Error)
+	assert.Equal(t, "default", stored.Group)
+	assert.Equal(t, "seed-model", stored.Models)
+	assert.Equal(t, []string{"default|seed-model"}, loadAbilityPairs(t, normalizationTestChannelID))
+}
+
+func TestInitChannelCacheIndexesLegacyPaddedChannelByTrimmedNames(t *testing.T) {
+	setupChannelStatusTest(t)
+	previousMemoryCache := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = true
+	t.Cleanup(func() { common.MemoryCacheEnabled = previousMemoryCache })
+
+	// A legacy row: hooks are skipped so the padded values persist raw, and the
+	// only ability row is the padded one the pre-normalization code wrote. The
+	// "default" group has no ability row at all.
+	legacy := newNormalizationTestChannel(paddedChannelGroup, paddedChannelModels)
+	require.NoError(t, DB.Session(&gorm.Session{SkipHooks: true}).Create(legacy).Error)
+	require.NoError(t, DB.Create(&Ability{Group: " vip ", Model: " gpt-4 ", ChannelId: legacy.Id, Enabled: true}).Error)
+	var raw Channel
+	require.NoError(t, DB.First(&raw, legacy.Id).Error)
+	require.Equal(t, paddedChannelGroup, raw.Group, "the fixture must hold the raw legacy value")
+
+	wantIndexed := func(t *testing.T) {
+		t.Helper()
+		for _, group := range []string{"vip", "default"} {
+			for _, modelName := range []string{"gpt-4", "gpt-4o"} {
+				assert.True(t, IsChannelEnabledForGroupModel(group, modelName, legacy.Id), "%s/%s", group, modelName)
+			}
+		}
+		assert.False(t, IsChannelEnabledForGroupModel(" vip ", " gpt-4 ", legacy.Id))
+	}
+
+	// The rebuild must create the index entry of a group that has no ability
+	// row instead of panicking, and key everything on the trimmed names.
+	require.NotPanics(t, InitChannelCache)
+	wantIndexed(t)
+
+	// FixAbility, the self-heal path, rebuilds the ability rows from the same
+	// accessors, so abilities and index agree on the trimmed names as well.
+	_, failed, err := FixAbility()
+	require.NoError(t, err)
+	require.Zero(t, failed)
+	assert.ElementsMatch(t,
+		[]string{"vip|gpt-4", "vip|gpt-4o", "default|gpt-4", "default|gpt-4o"},
+		loadAbilityPairs(t, legacy.Id))
+	wantIndexed(t)
+}

@@ -1767,6 +1767,44 @@ func TestServeTaskPluginImageProtocolWaitsForAsynchronousTask(t *testing.T) {
 	}
 }
 
+// The failure reason of a polled task is upstream text: with sanitization on,
+// an ordinary caller gets the standardized message instead of it.
+func TestServeTaskPluginImageProtocolFailureReasonIsProjectedForClient(t *testing.T) {
+	for _, sanitize := range []bool{true, false} {
+		t.Run(fmt.Sprintf("sanitize=%t", sanitize), func(t *testing.T) {
+			setUpstreamErrorSanitizer(t, sanitize)
+			// The sanitizer resolves the caller's role through the user table.
+			database, _ := openTaskDialectDatabase(t, &model.User{})
+			previousDB := model.DB
+			model.DB = database
+			t.Cleanup(func() { model.DB = previousDB })
+			pinned := imageProtocolTestEndpoint(t)
+			c, recorder := newImageProtocolTestContext("")
+			deps := pluginProtocolTestDeps()
+			deps.imagePollInterval = time.Millisecond
+			deps.pollTask = func(_ context.Context, task *model.Task) error {
+				task.Status = model.TaskStatusFailure
+				task.FailReason = taskFailUpstreamSecret
+				return nil
+			}
+			deps.submit = func(_ *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *dto.TaskError) {
+				return imageProtocolTestOutcome(info, model.TaskStatusSubmitted), nil
+			}
+			serveTaskPluginImageProtocol(c, pinned, deps)
+			require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
+			var response map[string]any
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			message := response["error"].(map[string]any)["message"].(string)
+			if sanitize {
+				assert.Contains(t, message, "The upstream request failed")
+				assert.NotContains(t, recorder.Body.String(), "acct-secret-77")
+			} else {
+				assert.Contains(t, message, "acct-secret-77")
+			}
+		})
+	}
+}
+
 // Submission failures use the OpenAI error envelope and surface a DashScope
 // {code, message} failure body as a readable vendor message.
 func TestServeTaskPluginImageProtocolSubmissionErrorUsesOpenAIEnvelope(t *testing.T) {

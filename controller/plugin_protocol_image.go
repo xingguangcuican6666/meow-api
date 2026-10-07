@@ -103,7 +103,7 @@ func serveTaskPluginImageProtocol(c *gin.Context, pinned pluginruntime.PinnedEnd
 		}
 	}
 	if task.Status == model.TaskStatusFailure {
-		reason := strings.TrimSpace(task.FailReason)
+		reason := strings.TrimSpace(service.TaskFailReasonForClient(c, task))
 		if reason == "" {
 			reason = "image generation failed"
 		}
