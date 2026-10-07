@@ -813,6 +813,12 @@ func TestResponsesWebSocketInitialUpstreamRejectionRefundsReservation(t *testing
 		{name: "bare error", upstream: `{"type":"error","status":500,"message":"upstream rejected"}`, status: http.StatusInternalServerError, wantType: "invalid_request_error", wantMessage: "upstream rejected"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// This test verifies that upstream error text reaches the client, so it
+			// disables sanitization for the assertion.
+			previous := setting.SanitizeUpstreamErrorEnabled
+			setting.SanitizeUpstreamErrorEnabled = false
+			t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = previous })
+
 			preConsumed := make(chan int, 1)
 			tokenID := make(chan int, 1)
 			// Pre-consume no longer estimates completion tokens, so an output-priced expression reserves nothing to refund.
@@ -892,6 +898,12 @@ func TestResponsesStreamOutcomesPreserveAccounting(t *testing.T) {
 			{name: "completed-zero-fixed", expression: `tier("request", fixed(0.002))`, terminal: `{"type":"response.completed","response":{"id":"first","status":"completed","usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}`},
 		} {
 			t.Run(transport+"/"+tc.name, func(t *testing.T) {
+				// This test verifies upstream frames are delivered unchanged, so it
+				// turns sanitization off for the assertion.
+				previous := setting.SanitizeUpstreamErrorEnabled
+				setting.SanitizeUpstreamErrorEnabled = false
+				t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = previous })
+
 				events := []string{`{"type":"response.created","response":{"id":"first","status":"in_progress"}}`}
 				if tc.delta {
 					events = append(events, `{"type":"response.output_text.delta","delta":"hello"}`)

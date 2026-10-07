@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	builtinplugins "github.com/QuantumNous/new-api/plugins"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -1295,7 +1296,18 @@ func TestSunoFetchEmptyIDsReturnsSuccessfulEmptyArray(t *testing.T) {
 	assert.JSONEq(t, `{"code":"success","message":"","data":[]}`, recorder.Body.String())
 }
 
+// disableUpstreamSanitization turns off upstream error sanitization for the
+// rest of the test. These route tests assert that plugin-authored hook detail
+// reaches the caller, which sanitization would otherwise replace.
+func disableUpstreamSanitization(t *testing.T) {
+	t.Helper()
+	previous := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = false
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = previous })
+}
+
 func TestPrepareTaskPluginRouteSurfacesDecodeHookMessage(t *testing.T) {
+	disableUpstreamSanitization(t)
 	plugin := compileTaskRoutePlugin(t, `
 export const meta = {
   apiVersion: 1, key: "route-decode-detail-test", name: "Decode", version: "1.0.0",
@@ -1327,6 +1339,7 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 }
 
 func TestPrepareTaskPluginRouteNativeErrorReceivesHookMessage(t *testing.T) {
+	disableUpstreamSanitization(t)
 	plugin := compileTaskRoutePlugin(t, `
 export const meta = {
   apiVersion: 1, key: "route-error-detail-test", name: "Error", version: "1.0.0",
@@ -1363,6 +1376,7 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 }
 
 func TestPrepareTaskPluginRouteRejectsNonObjectResultWithFixedMessage(t *testing.T) {
+	disableUpstreamSanitization(t)
 	plugin := compileTaskRoutePlugin(t, `
 export const meta = {
   apiVersion: 1, key: "route-result-object-test", name: "Result", version: "1.0.0",
@@ -1394,6 +1408,7 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 }
 
 func TestPrepareTaskPluginRouteSurfacesRequestDecodeDetail(t *testing.T) {
+	disableUpstreamSanitization(t)
 	plugin := compileTaskRoutePlugin(t, `
 export const meta = {
   apiVersion: 1, key: "route-decode-body-test", name: "Decode", version: "1.0.0",
@@ -1437,6 +1452,7 @@ func TestSanitizedTaskPluginErrorIgnoresDetailOn5xx(t *testing.T) {
 }
 
 func TestTaskPluginErrorFallbackMessageIncludesRequestID(t *testing.T) {
+	disableUpstreamSanitization(t)
 	plugin := compileTaskRoutePlugin(t, genericTaskPluginSource)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)

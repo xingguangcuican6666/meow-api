@@ -2,6 +2,7 @@ package openai
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -185,6 +186,20 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (*types.
 					localUsage.OutputTokens += textToken + audioToken
 					localUsage.OutputTokenDetails.TextTokens += textToken
 					localUsage.OutputTokenDetails.AudioTokens += audioToken
+				}
+
+				// If this is an error event from the upstream, sanitize the error
+				// payload before forwarding it to the client. Directly forwarding
+				// upstream error frames leaks provider names, raw error details, and
+				// internal metadata to the client.
+				if realtimeEvent.Type == dto.RealtimeEventTypeError && realtimeEvent.Error != nil {
+					sanitized := service.SanitizeUpstreamOpenAIError(c, *realtimeEvent.Error, http.StatusBadGateway)
+					helper.WssError(c, clientConn, sanitized)
+					select {
+					case receiveChan <- message:
+					default:
+					}
+					continue
 				}
 
 				err = helper.WssString(c, clientConn, string(message))

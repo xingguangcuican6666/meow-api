@@ -15,6 +15,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -598,6 +599,12 @@ func TestOpenaiImageHandlersReturnJSONError(t *testing.T) {
 // event inside the SSE stream is recorded as a soft error while the payload is
 // still forwarded to the client.
 func TestOpenaiImageStreamHandlerRecordsUpstreamErrorEvent(t *testing.T) {
+	// This test asserts the verbatim upstream error frame reaches the client, so
+	// it disables sanitization.
+	previousSanitize := setting.SanitizeUpstreamErrorEnabled
+	setting.SanitizeUpstreamErrorEnabled = false
+	t.Cleanup(func() { setting.SanitizeUpstreamErrorEnabled = previousSanitize })
+
 	oldMode := gin.Mode()
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() { gin.SetMode(oldMode) })
