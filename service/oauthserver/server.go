@@ -97,12 +97,9 @@ func RefreshGrant(client *model.OAuthClient, refreshToken string) (*IssuedTokens
 		AccessExpiresAt:   now.Add(time.Duration(settings.GetAccessTokenTTL()) * time.Second).Unix(),
 		RefreshExpiresAt:  now.Add(time.Duration(settings.GetRefreshTokenTTL()) * time.Second).Unix(),
 	}
-	issued, err := model.RotateOAuthRefreshToken(refreshToken, rotation)
+	issued, err := model.RotateOAuthRefreshToken(client.ClientId, refreshToken, rotation)
 	if err != nil {
 		return nil, err
-	}
-	if issued.ClientId != client.ClientId {
-		return nil, model.ErrOAuthTokenNotFound
 	}
 	scopes := issued.GetScopes()
 	return assembleTokens(client, issued.UserId, scopes, issued.Nonce, issued.AuthTime, accessPlain, refreshPlain, settings.GetAccessTokenTTL())

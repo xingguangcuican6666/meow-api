@@ -93,17 +93,20 @@ type OAuthTokenRotation struct {
 
 // RotateOAuthRefreshToken atomically validates a presented refresh token and,
 // on success, supersedes it with a new token pair in the same grant family.
+// The token must have been issued to clientId: a token presented by another
+// client is reported as not found without any write, so a leaked refresh token
+// cannot be used to destroy the grant family it belongs to.
 // A refresh token that was already rotated (revoked row) triggers family-wide
 // revocation and ErrOAuthRefreshReused.
-func RotateOAuthRefreshToken(refreshToken string, next OAuthTokenRotation) (*OAuthToken, error) {
-	if refreshToken == "" {
+func RotateOAuthRefreshToken(clientId, refreshToken string, next OAuthTokenRotation) (*OAuthToken, error) {
+	if refreshToken == "" || clientId == "" {
 		return nil, ErrOAuthTokenNotFound
 	}
 	refreshHash := hashOAuthSecret("refresh-token", refreshToken)
 	var issued *OAuthToken
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var current OAuthToken
-		if err := lockForUpdate(tx).Where("refresh_token_hash = ?", refreshHash).First(&current).Error; err != nil {
+		if err := lockForUpdate(tx).Where("refresh_token_hash = ? AND client_id = ?", refreshHash, clientId).First(&current).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return ErrOAuthTokenNotFound
 			}

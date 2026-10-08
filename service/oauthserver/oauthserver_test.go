@@ -1,12 +1,17 @@
 package oauthserver
 
 import (
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/model"
 
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestValidChallengeMethod(t *testing.T) {
@@ -137,4 +142,47 @@ func TestBusinessScopeCatalog(t *testing.T) {
 	assert.False(t, ok, "the api_keys scope must be gone from the catalog")
 	user := &model.User{Username: "carol", Email: "carol@example.com"}
 	assert.Empty(t, ClaimsForScopes(user, []string{ScopeWalletRead, ScopeWalletTopUp, ScopeAPIKeysManage, ScopeModelsRead, ScopeModelsInvoke}))
+}
+
+func TestRefreshGrantRejectsAnotherClientsTokenWithoutConsumingIt(t *testing.T) {
+	// A refresh token presented by a client it was not issued to must be rejected
+	// without any write. Otherwise anyone holding a leaked refresh token could
+	// destroy the victim's grant family by replaying it from their own client,
+	// and the victim's next refresh would report token reuse instead of working.
+	originalDB := model.DB
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.OAuthToken{}))
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = originalDB
+		if sqlDB, err := db.DB(); err == nil {
+			require.NoError(t, sqlDB.Close())
+		}
+	})
+
+	const victimRefresh = "rt_victim_secret"
+	victim := &model.OAuthToken{
+		GrantId:          "grant-victim",
+		ClientId:         "client-victim",
+		UserId:           7,
+		Scopes:           "profile",
+		AccessExpiresAt:  time.Now().Add(time.Hour).Unix(),
+		RefreshExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+	}
+	victim.SetAccessToken("at_victim")
+	victim.SetRefreshToken(victimRefresh)
+	require.NoError(t, victim.Insert())
+
+	// Another client presents the victim's refresh token.
+	_, err = RefreshGrant(&model.OAuthClient{ClientId: "client-attacker"}, victimRefresh)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, model.ErrOAuthTokenNotFound)
+
+	// The rightful client must still be able to refresh it.
+	issued, err := RefreshGrant(&model.OAuthClient{ClientId: "client-victim"}, victimRefresh)
+	require.NoError(t, err)
+	require.NotNil(t, issued)
+	assert.NotEmpty(t, issued.RefreshToken)
 }
