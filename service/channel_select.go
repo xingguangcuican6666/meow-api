@@ -284,6 +284,20 @@ func tryModelOperatorChannel(param *RetryParam, filters []dto.ChannelFilter) *mo
 	if !model.IsChannelEnabledForAnyGroupModel(selectionGroups(param), param.ModelName, operatorChannelID) {
 		return nil
 	}
+	// ChannelSatisfiesFilters only evaluates the request_path, task_plugin and
+	// responses_websocket filters; the channel-id exclusion list is consumed by
+	// the candidate pools instead (model/channel_cache.go, model/ability.go), so
+	// this single-channel path has to honour it itself. Otherwise the mapping
+	// silently bypasses the per-model error cooldown and the per-user failure
+	// breaker.
+	for _, filter := range filters {
+		if filter.Kind != dto.FilterExcludeChannelIds {
+			continue
+		}
+		if slices.Contains(filter.ExcludeChannelIds, operatorChannelID) {
+			return nil
+		}
+	}
 	if ok, _ := model.ChannelSatisfiesFilters(channel, param.ModelName, filters); !ok {
 		return nil
 	}

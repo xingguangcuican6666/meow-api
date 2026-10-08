@@ -284,7 +284,11 @@ func TestCacheGetRandomSatisfiedChannelFallsBackWhenSoleOperatorUnusable(t *test
 	assert.Contains(t, []int{2401, 2402}, channel.Id)
 
 	// Operator channel cooled down by failures: the mapping must not bypass the
-	// cooldown, so the request falls back to the other channel.
+	// cooldown, so the request falls back to the other channel. The operator has
+	// to be enabled again first, otherwise the disabled check above already
+	// decides the outcome and the cooldown branch is never exercised.
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 2401).Update("status", common.ChannelStatusEnabled).Error)
+	model.InitChannelCache()
 	setModelOperator(t, map[string]int{modelName: 2401})
 	for i := 0; i < 5; i++ {
 		RecordChannelAttemptOutcome(2401, modelName, true)
