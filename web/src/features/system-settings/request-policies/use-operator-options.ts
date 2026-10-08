@@ -37,7 +37,10 @@ async function fetchAllOperatorChannels(): Promise<Channel[]> {
  * model that is not currently enabled on any channel. */
 export function useOperatorModels() {
   return useQuery({
-    queryKey: ['enabled-models'],
+    // Deliberately not the bare ['enabled-models'] key: the model ratio form
+    // caches the entire {success,message,data} envelope under that key, so
+    // sharing it hands this hook an object where it expects model names.
+    queryKey: ['enabled-models', 'operator'],
     // An unsuccessful response carries no model list, so it is raised like a
     // failed request instead of looking like an empty list of models.
     queryFn: async () =>
