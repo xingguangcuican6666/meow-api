@@ -107,9 +107,9 @@ describe('banned account at runtime', () => {
     expect(requests).toBe(1)
     expect(refreshSend).not.toHaveBeenCalled()
     expect(replace).toHaveBeenCalledWith(ACCOUNT_SUSPENDED_PATH)
-    expect(notify.mock.calls.map(([message]) => message)).toEqual([
-      'Your account has been suspend!',
-    ])
+    // The page itself states the verdict; a toast would be a second,
+    // competing explanation of the same thing.
+    expect(notify).not.toHaveBeenCalled()
     expect(useAuthStore.getState().auth.user).toBeNull()
   })
 
@@ -156,9 +156,7 @@ describe('banned account at runtime', () => {
     // The original request is never replayed against a banned account.
     expect(requests).toBe(1)
     expect(replace).toHaveBeenCalledWith(ACCOUNT_SUSPENDED_PATH)
-    expect(notify.mock.calls.map(([message]) => message)).toEqual([
-      'Your account has been suspend!',
-    ])
+    expect(notify).not.toHaveBeenCalled()
     expect(useAuthStore.getState().auth.user).toBeNull()
   })
 

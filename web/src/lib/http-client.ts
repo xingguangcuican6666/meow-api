@@ -103,11 +103,9 @@ api.interceptors.response.use(
     if (hasAccountDisabledCode(error)) {
       // A ban is a verdict about the account, not about this request. The
       // credential behind it is unusable, so it must neither be refreshed nor
-      // replayed: explain the account state on its own page instead.
+      // replayed: the account-state page explains the verdict itself, and no
+      // toast should compete with it.
       clearAuthentication(false)
-      if (!skipErrorHandler) {
-        handleServerError(error)
-      }
       redirectToAccountSuspended()
     } else if (status === 401) {
       if (config && !config.skipAuthRefresh && !config.authRetry) {
@@ -126,14 +124,8 @@ api.interceptors.response.use(
 
         // Disabling an account revokes its sessions, so the refresh reports a
         // ban where an ordinary expiry would report an anonymous outcome.
+        // The account-state page states the verdict; no toast for it.
         if (outcome.kind === 'account_disabled') {
-          if (!skipErrorHandler) {
-            handleServerError({
-              message: t('Your account has been suspend!'),
-              [safeServerErrorMessage]: true,
-              cause: error,
-            })
-          }
           redirectToAccountSuspended()
         } else if (outcome.kind === 'anonymous' || outcome.kind === 'out_of_sync') {
           if (!skipErrorHandler) {

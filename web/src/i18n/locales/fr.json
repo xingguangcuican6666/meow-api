@@ -7144,7 +7144,18 @@
     "Account status": "Statut du compte",
     "Your account has been suspend!": "Votre compte a été suspendu !",
     "Sign in with another account": "Se connecter avec un autre compte",
-    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "Vos sessions et clés API existantes ont été révoquées ; ce compte ne peut plus effectuer de requêtes.",
-    "If you believe this is a mistake, contact the administrator of this site.": "Si vous pensez qu’il s’agit d’une erreur, contactez l’administrateur de ce site."
+    "Your access has been suspended by an administrator. All login sessions and API keys for this account were revoked, and it can no longer sign in or place requests.": "Un administrateur a suspendu votre accès. Toutes les sessions et clés API de ce compte ont été révoquées ; il ne peut plus se connecter ni effectuer de requêtes.",
+    "Why you see this page": "Pourquoi cette page s’affiche",
+    "Account disabled": "Compte désactivé",
+    "An administrator set this account to disabled, so authentication is refused on every path.": "Un administrateur a désactivé ce compte ; l’authentification est donc refusée sur tous les chemins.",
+    "Sessions and keys revoked": "Sessions et clés révoquées",
+    "Login sessions, access tokens and API keys belonging to this account stopped working at the moment it was disabled.": "Les sessions, jetons d’accès et clés API de ce compte ont cessé de fonctionner dès sa désactivation.",
+    "Restoration needed": "Restauration requise",
+    "Only an administrator can re-enable the account. Retrying the sign-in form will keep failing until that happens.": "Seul un administrateur peut réactiver le compte. Réessayer la connexion échouera tant que ce n’est pas fait.",
+    "What you can do:": "Ce que vous pouvez faire :",
+    "Contact your administrator": "Contacter votre administrateur",
+    "Ask the administrator of this site why the account was disabled and what is needed to restore it.": "Demandez à l’administrateur de ce site pourquoi le compte a été désactivé et ce qui est nécessaire pour le restaurer.",
+    "Return to the site homepage.": "Revenir à la page d’accueil du site.",
+    "Forced retry status codes must be valid HTTP codes": "Les codes de statut de nouvelle tentative forcée doivent être des codes HTTP valides"
   }
 }

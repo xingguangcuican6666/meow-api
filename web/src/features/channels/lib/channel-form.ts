@@ -559,6 +559,17 @@ export const channelFormSchema = z
         })
       }
     }
+
+    if (data.automatic_retry_override_enabled) {
+      const parsed = parseHttpStatusCodeRules(data.automatic_retry_status_codes)
+      if (!parsed.ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['automatic_retry_status_codes'],
+          message: t('Forced retry status codes must be valid HTTP codes'),
+        })
+      }
+    }
   })
   .superRefine((data, ctx) => {
     if (
@@ -997,6 +1008,9 @@ export function transformChannelToFormDefaults(
   let emptyResponseRetryOverrideEnabled = false
   let emptyResponseRetryEnabled = false
   let emptyResponseRetryInPlace = true
+  let automaticRetryOverrideEnabled = false
+  let automaticRetryStatusCodes = ''
+  let automaticRetryKeywords = ''
   let billingQuery = { ...DEFAULT_BILLING_QUERY_FORM_VALUES }
   let ratioProbe = { ...DEFAULT_RATIO_PROBE_FORM_VALUES }
   let imageUpscale = { ...DEFAULT_IMAGE_UPSCALE_FORM_VALUES }
@@ -1047,6 +1061,10 @@ export function transformChannelToFormDefaults(
         parsed.empty_response_retry_override_enabled === true
       emptyResponseRetryEnabled = parsed.empty_response_retry_enabled === true
       emptyResponseRetryInPlace = parsed.empty_response_retry_in_place === true
+      automaticRetryOverrideEnabled =
+        parsed.automatic_retry_override_enabled === true
+      automaticRetryStatusCodes = parsed.automatic_retry_status_codes || ''
+      automaticRetryKeywords = parsed.automatic_retry_keywords || ''
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel settings:', error)
@@ -1108,6 +1126,9 @@ export function transformChannelToFormDefaults(
     empty_response_retry_override_enabled: emptyResponseRetryOverrideEnabled,
     empty_response_retry_enabled: emptyResponseRetryEnabled,
     empty_response_retry_in_place: emptyResponseRetryInPlace,
+    automatic_retry_override_enabled: automaticRetryOverrideEnabled,
+    automatic_retry_status_codes: automaticRetryStatusCodes,
+    automatic_retry_keywords: automaticRetryKeywords,
   }
 }
 

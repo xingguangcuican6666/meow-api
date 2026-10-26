@@ -758,12 +758,9 @@ export const STATIC_I18N_KEYS = [
   'Telegram binding failed. Please try again.',
   'Telegram authorization failed. Please try again.',
   'This Telegram account is not linked. Sign in using another method and link it first.',
-  // Banned-account page and its sign-in-time presentation (AUTH_USER_DISABLED).
+  // Banned-account verdict surfaced through `serverErrorMessageKeys`, so no
+  // literal t() call picks it up.
   'Your account has been suspend!',
-  'Account status',
-  'Sign in with another account',
-  'Your existing sessions and API keys have been revoked, and this account can no longer place requests.',
-  'If you believe this is a mistake, contact the administrator of this site.',
   'The telegram OAuth provider name is reserved. Ask your administrator to rename the conflicting custom provider.',
   'Telegram login has changed. Reload the page and start Telegram OAuth again.',
   'Login session',

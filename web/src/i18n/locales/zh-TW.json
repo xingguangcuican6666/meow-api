@@ -7144,7 +7144,18 @@
     "Account status": "帳號狀態",
     "Your account has been suspend!": "您的帳號已被封禁！",
     "Sign in with another account": "使用其他帳號登錄",
-    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "您現有的登入會話與 API 令牌均已吊銷，該帳號無法繼續發起請求。",
-    "If you believe this is a mistake, contact the administrator of this site.": "如果您認為這是誤判，請聯繫本站管理員。"
+    "Your access has been suspended by an administrator. All login sessions and API keys for this account were revoked, and it can no longer sign in or place requests.": "管理員已停用該帳號。該帳號的全部登入會話與 API 令牌均已吊銷，無法再登入或發起請求。",
+    "Why you see this page": "為什麼看到這個頁面",
+    "Account disabled": "帳號已被停用",
+    "An administrator set this account to disabled, so authentication is refused on every path.": "管理員已將該帳號設為停用，因此所有登入與請求路徑都會被拒絕。",
+    "Sessions and keys revoked": "會話與令牌已吊銷",
+    "Login sessions, access tokens and API keys belonging to this account stopped working at the moment it was disabled.": "帳號被停用之時，其登入會話、存取令牌與 API 令牌即全部失效。",
+    "Restoration needed": "需要管理員恢復",
+    "Only an administrator can re-enable the account. Retrying the sign-in form will keep failing until that happens.": "只有管理員可以重新啟用該帳號。在此之前，反覆嘗試登入都會繼續失敗。",
+    "What you can do:": "你可以做什麼：",
+    "Contact your administrator": "聯絡管理員",
+    "Ask the administrator of this site why the account was disabled and what is needed to restore it.": "向本站管理員確認帳號被停用的原因，以及恢復所需的條件。",
+    "Return to the site homepage.": "返回站點首頁。",
+    "Forced retry status codes must be valid HTTP codes": "強制重試狀態碼必須是有效的 HTTP 狀態碼"
   }
 }
