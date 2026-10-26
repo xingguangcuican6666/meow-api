@@ -91,6 +91,8 @@ func Login(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgDatabaseError)
 		case errors.Is(err, model.ErrUserEmptyCredentials):
 			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		case errors.Is(err, model.ErrUserAccountDisabled):
+			common.ApiErrorWithCode(c, common.AuthErrorCodeUserDisabled, common.TranslateMessage(c, i18n.MsgAuthUserBanned))
 		default:
 			common.ApiErrorI18n(c, i18n.MsgUserUsernameOrPasswordError)
 		}
@@ -163,8 +165,12 @@ func setupLogin(user *model.User, migration *service.LegacyGitHubMigration, c *g
 }
 
 func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin.Context) {
-	if user == nil || user.Id <= 0 || user.Status != common.UserStatusEnabled {
+	if user == nil || user.Id <= 0 {
 		common.ApiErrorI18n(c, i18n.MsgAuthUserBanned)
+		return
+	}
+	if user.Status != common.UserStatusEnabled {
+		common.ApiErrorWithCode(c, common.AuthErrorCodeUserDisabled, common.TranslateMessage(c, i18n.MsgAuthUserBanned))
 		return
 	}
 	currentUser, err := model.GetSelfUserById(user.Id)

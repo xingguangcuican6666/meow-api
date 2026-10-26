@@ -28,7 +28,14 @@ export const Route = createFileRoute('/_authenticated')({
     // present. That skip is an optimization for public pages and must not
     // decide a protected route, so resolve against the server before
     // redirecting. An in-memory session returns without a request.
-    await resolveAuthentication()
+    const outcome = await resolveAuthentication()
+
+    // A ban revokes the sessions behind it. Send the visitor to the page that
+    // states the account verdict rather than to a sign-in form that would
+    // refuse the same account again.
+    if (outcome.kind === 'account_disabled') {
+      throw redirect({ to: '/account-suspended', replace: true })
+    }
 
     const { auth } = useAuthStore.getState()
 

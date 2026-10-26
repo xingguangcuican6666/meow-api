@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -121,10 +122,7 @@ func WeChatAuth(c *gin.Context) {
 	}
 
 	if user.Status != common.UserStatusEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "用户已被封禁",
-			"success": false,
-		})
+		common.ApiErrorWithCode(c, common.AuthErrorCodeUserDisabled, common.TranslateMessage(c, i18n.MsgAuthUserBanned))
 		return
 	}
 	setupLogin(&user, nil, c)

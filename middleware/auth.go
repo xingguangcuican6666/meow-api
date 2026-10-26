@@ -57,7 +57,7 @@ func authHelper(c *gin.Context, minRole int) {
 		return
 	}
 	if user.Status != common.UserStatusEnabled {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "AUTH_USER_DISABLED", "message": common.TranslateMessage(c, i18n.MsgAuthUserBanned)})
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": common.AuthErrorCodeUserDisabled, "message": common.TranslateMessage(c, i18n.MsgAuthUserBanned)})
 		return
 	}
 	if user.Role < minRole {
@@ -223,6 +223,10 @@ func writeDashboardAuthError(c *gin.Context, err error) {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "AUTH_TOKEN_EXPIRED", "message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn)})
 		return
 	}
+	if errors.Is(err, service.ErrUserAccountDisabled) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": common.AuthErrorCodeUserDisabled, "message": common.TranslateMessage(c, i18n.MsgAuthUserBanned)})
+		return
+	}
 	if errors.Is(err, service.ErrLoginSessionRevoked) || errors.Is(err, gorm.ErrRecordNotFound) {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "AUTH_SESSION_REVOKED", "message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn)})
 		return
@@ -348,6 +352,7 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		if userCache.Status != common.UserStatusEnabled {
 			c.JSON(http.StatusForbidden, gin.H{
 				"success": false,
+				"code":    common.AuthErrorCodeUserDisabled,
 				"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
 			})
 			c.Abort()

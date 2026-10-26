@@ -298,7 +298,6 @@ const (
 	MsgOAuthStateInvalid    = "oauth.state_invalid"
 	MsgOAuthNotEnabled      = "oauth.not_enabled"
 	MsgOAuthUserDeleted     = "oauth.user_deleted"
-	MsgOAuthUserBanned      = "oauth.user_banned"
 	MsgOAuthBindSuccess     = "oauth.bind_success"
 	MsgOAuthAlreadyBound    = "oauth.already_bound"
 	MsgOAuthNotAutoLinked   = "oauth.not_auto_linked"

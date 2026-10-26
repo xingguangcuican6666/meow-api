@@ -7140,6 +7140,11 @@
     "Please enter a title": "Пожалуйста, введите заголовок",
     "Title must be at most {{max}} characters": "Заголовок должен содержать не более {{max}} символов",
     "Please enter a link": "Пожалуйста, введите ссылку",
-    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "Введите путь внутри приложения, начинающийся с / (например, /pricing), или действительный URL http(s)."
+    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "Введите путь внутри приложения, начинающийся с / (например, /pricing), или действительный URL http(s).",
+    "Account status": "Статус учётной записи",
+    "Your account has been suspend!": "Ваша учётная запись приостановлена!",
+    "Sign in with another account": "Войти под другой учётной записью",
+    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "Ваши существующие сессии и API-ключи отозваны, и эта учётная запись больше не может отправлять запросы.",
+    "If you believe this is a mistake, contact the administrator of this site.": "Если вы считаете, что это ошибка, обратитесь к администратору этого сайта."
   }
 }

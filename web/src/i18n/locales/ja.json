@@ -7140,6 +7140,11 @@
     "Please enter a title": "タイトルを入力してください",
     "Title must be at most {{max}} characters": "タイトルは{{max}}文字以内にしてください",
     "Please enter a link": "リンクを入力してください",
-    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "/ で始まるアプリ内パス（例：/pricing）または有効な http(s) URL を入力してください。"
+    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "/ で始まるアプリ内パス（例：/pricing）または有効な http(s) URL を入力してください。",
+    "Account status": "アカウントの状態",
+    "Your account has been suspend!": "あなたのアカウントは停止されました！",
+    "Sign in with another account": "別のアカウントでサインイン",
+    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "既存のセッションと API キーは失効済みのため、このアカウントではリクエストを送信できません。",
+    "If you believe this is a mistake, contact the administrator of this site.": "誤りだと思われる場合は、サイトの管理者にお問い合わせください。"
   }
 }

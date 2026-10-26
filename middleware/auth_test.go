@@ -456,3 +456,40 @@ func TestOAuthRelayAuthRejections(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
 }
+
+// A session whose account was disabled mid-flight must answer with the stable
+// ban code so the dashboard can route to the account-state page, instead of an
+// ordinary session-revoked response that would send the user back to the
+// sign-in form.
+func TestUserAuthReportsDisabledAccountWithBanCode(t *testing.T) {
+	setupDashboardAuthMiddlewareTest(t)
+	user := &model.User{
+		Username: "banned-mid-session-user", Password: "unused", Role: common.RoleCommonUser,
+		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+	}
+	require.NoError(t, model.DB.Create(user).Error)
+	bundle, err := service.CreateLoginSession(user.Id, "password", "127.0.0.1", "agent")
+	require.NoError(t, err)
+	// Disable the account after the session was issued, keeping the session row
+	// active: ValidateLoginSession consults the live user row and must report
+	// the ban rather than an ordinary revocation.
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("status", common.UserStatusDisabled).Error)
+	router := gin.New()
+	router.GET("/protected", UserAuth(), func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request.Header.Set("Authorization", "Bearer "+bundle.AccessToken)
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusForbidden, response.Code)
+	var body struct {
+		Success bool   `json:"success"`
+		Code    string `json:"code"`
+	}
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &body))
+	assert.False(t, body.Success)
+	assert.Equal(t, common.AuthErrorCodeUserDisabled, body.Code)
+}

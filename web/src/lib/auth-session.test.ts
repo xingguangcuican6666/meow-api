@@ -121,6 +121,33 @@ describe('authentication session coordination', () => {
     expect(clears).toEqual([[true, undefined]])
   })
 
+  test('a disabled account reports its own outcome instead of a plain sign-out', async () => {
+    const clears: Array<[boolean, string | undefined]> = []
+    const runtime: AuthRefreshRuntime = {
+      // The refresh endpoint answers a ban with 403 + AUTH_USER_DISABLED.
+      // Disabling an account revokes its sessions, so without a distinct
+      // outcome the client would only see a vanished session and send the
+      // user back to the sign-in form instead of the account-state page.
+      request: async () => ({
+        status: 403,
+        data: { success: false, code: 'AUTH_USER_DISABLED' },
+      }),
+      getExpectedSID: () => bundle.session.sid,
+      parseBundle: () => null,
+      acceptBundle: () => undefined,
+      clear: (synchronizeTabs, bootstrapState) => {
+        clears.push([synchronizeTabs, bootstrapState])
+      },
+      markTransient: () => undefined,
+      wait: async () => undefined,
+    }
+
+    expect(await createRefreshRunner(runtime)()).toEqual({
+      kind: 'account_disabled',
+    })
+    expect(clears).toEqual([[true, undefined]])
+  })
+
   test('a temporary refresh failure remains retryable without clearing the session', async () => {
     let transientCount = 0
     let clearCount = 0

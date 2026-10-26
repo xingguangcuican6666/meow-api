@@ -7140,6 +7140,11 @@
     "Please enter a title": "Veuillez saisir un titre",
     "Title must be at most {{max}} characters": "Le titre ne doit pas dépasser {{max}} caractères",
     "Please enter a link": "Veuillez saisir un lien",
-    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "Saisissez un chemin d'application commençant par / (par exemple /pricing) ou une URL http(s) valide."
+    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "Saisissez un chemin d'application commençant par / (par exemple /pricing) ou une URL http(s) valide.",
+    "Account status": "Statut du compte",
+    "Your account has been suspend!": "Votre compte a été suspendu !",
+    "Sign in with another account": "Se connecter avec un autre compte",
+    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "Vos sessions et clés API existantes ont été révoquées ; ce compte ne peut plus effectuer de requêtes.",
+    "If you believe this is a mistake, contact the administrator of this site.": "Si vous pensez qu’il s’agit d’une erreur, contactez l’administrateur de ce site."
   }
 }

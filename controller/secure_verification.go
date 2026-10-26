@@ -116,6 +116,9 @@ func writeSecurityOperationError(c *gin.Context, err error) {
 	case errors.Is(err, model.ErrUserSessionInvalid), errors.Is(err, model.ErrUserSessionInactive):
 		writeAuthSessionError(c, service.ErrAuthTokenInvalid)
 		return
+	case errors.Is(err, service.ErrUserAccountDisabled):
+		status = http.StatusForbidden
+		code, message = common.AuthErrorCodeUserDisabled, i18n.T(c, i18n.MsgAuthUserBanned)
 	default:
 		c.Set("security_error_code", "AUTH_INTERNAL_ERROR")
 		writeAuthSessionError(c, err)

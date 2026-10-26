@@ -7140,6 +7140,11 @@
     "Please enter a title": "請輸入標題",
     "Title must be at most {{max}} characters": "標題最多 {{max}} 個字元",
     "Please enter a link": "請輸入連結",
-    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "請輸入以 / 開頭的應用程式內路徑（例如 /pricing）或有效的 http(s) URL。"
+    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "請輸入以 / 開頭的應用程式內路徑（例如 /pricing）或有效的 http(s) URL。",
+    "Account status": "帳號狀態",
+    "Your account has been suspend!": "您的帳號已被封禁！",
+    "Sign in with another account": "使用其他帳號登錄",
+    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "您現有的登入會話與 API 令牌均已吊銷，該帳號無法繼續發起請求。",
+    "If you believe this is a mistake, contact the administrator of this site.": "如果您認為這是誤判，請聯繫本站管理員。"
   }
 }
