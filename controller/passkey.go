@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -427,7 +428,7 @@ func PasskeyLoginFinish(c *gin.Context) {
 	}
 
 	if modelUser.Status != common.UserStatusEnabled {
-		common.ApiErrorMsg(c, "该用户已被禁用")
+		common.ApiErrorWithCode(c, common.AuthErrorCodeUserDisabled, common.TranslateMessage(c, i18n.MsgAuthUserBanned))
 		return
 	}
 

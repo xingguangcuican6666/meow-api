@@ -7140,6 +7140,11 @@
     "Please enter a title": "Please enter a title",
     "Title must be at most {{max}} characters": "Title must be at most {{max}} characters",
     "Please enter a link": "Please enter a link",
-    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "Enter an app path starting with / (for example /pricing) or a valid http(s) URL."
+    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.",
+    "Account status": "Account status",
+    "Your account has been suspend!": "Your account has been suspend!",
+    "Sign in with another account": "Sign in with another account",
+    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "Your existing sessions and API keys have been revoked, and this account can no longer place requests.",
+    "If you believe this is a mistake, contact the administrator of this site.": "If you believe this is a mistake, contact the administrator of this site."
   }
 }

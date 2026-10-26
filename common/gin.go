@@ -228,6 +228,18 @@ func ApiErrorI18n(c *gin.Context, key string, args ...map[string]any) {
 	})
 }
 
+// ApiErrorWithCode returns a business failure that carries a stable machine
+// code next to the message. Clients that need to branch on the failure reason
+// (for example the banned-account page) read the code instead of matching the
+// localized message.
+func ApiErrorWithCode(c *gin.Context, code, message string) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": false,
+		"code":    code,
+		"message": message,
+	})
+}
+
 // ApiSuccessI18n returns a translated success message based on the user's language preference
 func ApiSuccessI18n(c *gin.Context, key string, data any, args ...map[string]any) {
 	msg := TranslateMessage(c, key, args...)

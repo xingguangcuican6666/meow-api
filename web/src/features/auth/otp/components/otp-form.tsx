@@ -20,6 +20,7 @@ import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { redirectToAccountSuspendedIfBanned } from '@/features/auth/lib/banned-account'
 import { handleServerError } from '@/lib/handle-server-error'
 import { AuthOperationError } from '@/lib/secure-verification'
 import { useAuthStore } from '@/stores/auth-store'
@@ -78,6 +79,7 @@ export function OtpForm() {
         toast.success(t('Signed in'))
       } catch (error) {
         if (!active) return
+        if (redirectToAccountSuspendedIfBanned(error)) return
         handleServerError(AuthOperationError.from(error))
         redirectToLogin()
       }

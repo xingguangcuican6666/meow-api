@@ -20,6 +20,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { t } from 'i18next'
 
+import { AUTH_USER_DISABLED_CODE } from '@/features/auth/lib/banned-account'
 import { publishAuthSessionEvent } from '@/lib/auth-session-sync'
 import { hasSessionHint } from '@/lib/session-hint'
 import {
@@ -34,6 +35,13 @@ export type RefreshOutcome =
   | { kind: 'authenticated'; bundle: AuthBundle }
   | { kind: 'anonymous' }
   | { kind: 'transient_error'; error: unknown }
+  /**
+   * The account behind an otherwise valid Refresh Cookie is disabled.
+   * Disabling an account revokes its sessions, so without this branch the
+   * client would only learn that a session vanished and send the user to the
+   * sign-in form instead of the page that explains the account state.
+   */
+  | { kind: 'account_disabled' }
   | { kind: 'out_of_sync'; code?: string }
 
 export interface AuthRefreshHTTPResponse {
@@ -248,6 +256,11 @@ export function createRefreshRunner(
       }
       runtime.clear(false)
       return { kind: 'out_of_sync', code }
+    }
+
+    if (code === AUTH_USER_DISABLED_CODE) {
+      runtime.clear(true)
+      return { kind: 'account_disabled' }
     }
 
     if (response.status === 401) {

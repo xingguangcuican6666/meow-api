@@ -7140,6 +7140,11 @@
     "Please enter a title": "请输入标题",
     "Title must be at most {{max}} characters": "标题最多 {{max}} 个字符",
     "Please enter a link": "请输入链接",
-    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "请输入以 / 开头的应用内路径（例如 /pricing）或有效的 http(s) URL。"
+    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "请输入以 / 开头的应用内路径（例如 /pricing）或有效的 http(s) URL。",
+    "Account status": "账号状态",
+    "Your account has been suspend!": "您的账号已被封禁！",
+    "Sign in with another account": "使用其他账号登录",
+    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "您现有的登录会话与 API 令牌均已吊销，该账号无法继续发起请求。",
+    "If you believe this is a mistake, contact the administrator of this site.": "如果您认为这是误判，请联系本站管理员。"
   }
 }

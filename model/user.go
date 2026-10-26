@@ -1160,8 +1160,13 @@ func (user *User) ValidateAndFill() (err error) {
 		return ErrInvalidCredentials
 	}
 	okay := common.ValidatePasswordAndHash(password, user.Password)
-	if !okay || user.Status != common.UserStatusEnabled {
+	if !okay {
 		return ErrInvalidCredentials
+	}
+	if user.Status != common.UserStatusEnabled {
+		// The password was correct, so this is not an enumeration signal: the
+		// caller already owns the account and deserves the real reason.
+		return ErrUserAccountDisabled
 	}
 	return nil
 }

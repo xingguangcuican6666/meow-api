@@ -26,6 +26,7 @@ import { Route as errors403RouteImport } from './routes/(errors)/403'
 import { Route as errors404RouteImport } from './routes/(errors)/404'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
+import { Route as errorsAccountSuspendedRouteImport } from './routes/(errors)/account-suspended'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
 import { Route as AuthenticatedOauthConsentRouteImport } from './routes/_authenticated/oauth-consent'
 import { Route as AuthenticatedSystemSettingsRouteRouteImport } from './routes/_authenticated/system-settings/route'
@@ -157,6 +158,11 @@ const errors500Route = errors500RouteImport.update({
 const errors503Route = errors503RouteImport.update({
   id: '/(errors)/503',
   path: '/503',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const errorsAccountSuspendedRoute = errorsAccountSuspendedRouteImport.update({
+  id: '/(errors)/account-suspended',
+  path: '/account-suspended',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedChat2linkRoute = AuthenticatedChat2linkRouteImport.update({
@@ -459,6 +465,7 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/account-suspended': typeof errorsAccountSuspendedRoute
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/oauth-consent': typeof AuthenticatedOauthConsentRoute
   '/custom/$itemId': typeof CustomItemIdRoute
@@ -524,6 +531,7 @@ export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/account-suspended': typeof errorsAccountSuspendedRoute
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/oauth-consent': typeof AuthenticatedOauthConsentRoute
   '/custom/$itemId': typeof CustomItemIdRoute
@@ -593,6 +601,7 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
+  '/(errors)/account-suspended': typeof errorsAccountSuspendedRoute
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
   '/_authenticated/oauth-consent': typeof AuthenticatedOauthConsentRoute
   '/custom/$itemId': typeof CustomItemIdRoute
@@ -661,6 +670,7 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/account-suspended'
     | '/chat2link'
     | '/oauth-consent'
     | '/custom/$itemId'
@@ -726,6 +736,7 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/account-suspended'
     | '/chat2link'
     | '/oauth-consent'
     | '/custom/$itemId'
@@ -794,6 +805,7 @@ export interface FileRouteTypes {
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
+    | '/(errors)/account-suspended'
     | '/_authenticated/chat2link'
     | '/_authenticated/oauth-consent'
     | '/custom/$itemId'
@@ -855,6 +867,7 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  errorsAccountSuspendedRoute: typeof errorsAccountSuspendedRoute
   CustomItemIdRoute: typeof CustomItemIdRoute
   OauthProviderRoute: typeof OauthProviderRoute
   AboutIndexRoute: typeof AboutIndexRoute
@@ -983,6 +996,13 @@ declare module '@tanstack/react-router' {
       path: '/503'
       fullPath: '/503'
       preLoaderRoute: typeof errors503RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(errors)/account-suspended': {
+      id: '/(errors)/account-suspended'
+      path: '/account-suspended'
+      fullPath: '/account-suspended'
+      preLoaderRoute: typeof errorsAccountSuspendedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/chat2link': {
@@ -1490,6 +1510,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  errorsAccountSuspendedRoute: errorsAccountSuspendedRoute,
   CustomItemIdRoute: CustomItemIdRoute,
   OauthProviderRoute: OauthProviderRoute,
   AboutIndexRoute: AboutIndexRoute,

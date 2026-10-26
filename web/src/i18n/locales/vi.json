@@ -7140,6 +7140,11 @@
     "Please enter a title": "Vui lòng nhập tiêu đề",
     "Title must be at most {{max}} characters": "Tiêu đề không được vượt quá {{max}} ký tự",
     "Please enter a link": "Vui lòng nhập liên kết",
-    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "Nhập đường dẫn trong ứng dụng bắt đầu bằng / (ví dụ /pricing) hoặc một URL http(s) hợp lệ."
+    "Enter an app path starting with / (for example /pricing) or a valid http(s) URL.": "Nhập đường dẫn trong ứng dụng bắt đầu bằng / (ví dụ /pricing) hoặc một URL http(s) hợp lệ.",
+    "Account status": "Trạng thái tài khoản",
+    "Your account has been suspend!": "Tài khoản của bạn đã bị đình chỉ!",
+    "Sign in with another account": "Đăng nhập bằng tài khoản khác",
+    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "Các phiên đăng nhập và khóa API hiện có của bạn đã bị thu hồi, và tài khoản này không thể tiếp tục gửi yêu cầu.",
+    "If you believe this is a mistake, contact the administrator of this site.": "Nếu bạn cho rằng đây là nhầm lẫn, vui lòng liên hệ quản trị viên của trang này."
   }
 }

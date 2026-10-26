@@ -34,7 +34,13 @@ export const Route = createFileRoute('/(auth)/sign-in')({
   beforeLoad: async ({ search }) => {
     // 根 guard 可能因为没有会话提示而跳过了 refresh。此处必须回源确认，
     // 否则持有有效 Refresh Cookie 的用户会被要求重新输入密码。
-    await resolveAuthentication()
+    const outcome = await resolveAuthentication()
+
+    // 封禁会吊销账号名下的全部会话。把用户送到说明账号状态的页面，
+    // 而不是让他在登录表单上反复被拒。
+    if (outcome.kind === 'account_disabled') {
+      throw redirect({ to: '/account-suspended', replace: true })
+    }
 
     const { auth } = useAuthStore.getState()
 

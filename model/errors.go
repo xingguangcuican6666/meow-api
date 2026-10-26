@@ -14,6 +14,11 @@ var (
 	ErrEmailAlreadyTaken    = errors.New("email already taken")
 	ErrEmailNotFound        = errors.New("email not found")
 	ErrEmailAmbiguous       = errors.New("email matches multiple users")
+	// ErrUserAccountDisabled marks a disabled account. It is reported only
+	// after the caller proved ownership of the account (a correct password, a
+	// verified OAuth identity or a completed passkey ceremony), so it never
+	// turns the login endpoint into an account-existence oracle.
+	ErrUserAccountDisabled = errors.New("user account is disabled")
 )
 
 // Token auth errors

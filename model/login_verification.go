@@ -61,7 +61,10 @@ func CreateUserSessionFromLoginFlow(token string, session *UserSession, validate
 		if err != nil {
 			return err
 		}
-		if state.Status != common.UserStatusEnabled || state.AuthVersion != session.UserAuthVersion {
+		if state.Status != common.UserStatusEnabled {
+			return ErrUserAccountDisabled
+		}
+		if state.AuthVersion != session.UserAuthVersion {
 			return ErrUserSessionInactive
 		}
 		if err := validate(tx, flow, state); err != nil {

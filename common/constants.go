@@ -290,6 +290,11 @@ const (
 	UserStatusDisabled = 2 // also don't use 0
 )
 
+// AuthErrorCodeUserDisabled is the stable machine code every ban response
+// carries. The dashboard routes to the account-state page on this code, so
+// the value must stay in sync with the frontend constant of the same name.
+const AuthErrorCodeUserDisabled = "AUTH_USER_DISABLED"
+
 const (
 	TokenStatusEnabled   = 1 // don't use 0, 0 is the default value!
 	TokenStatusDisabled  = 2 // also don't use 0

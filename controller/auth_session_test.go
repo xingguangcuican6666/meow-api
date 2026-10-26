@@ -87,6 +87,21 @@ func TestWriteAuthSessionErrorMapsSessionGrowthLimits(t *testing.T) {
 			expectedStatus: http.StatusTooManyRequests,
 			expectedCode:   "AUTH_SESSION_ISSUANCE_LIMIT",
 		},
+		{
+			// A ban revokes the sessions behind it, so the client must be
+			// able to tell this apart from an ordinary expiry (401) and route
+			// to the account-state page instead of the sign-in form.
+			name:           "disabled account",
+			err:            service.ErrUserAccountDisabled,
+			expectedStatus: http.StatusForbidden,
+			expectedCode:   common.AuthErrorCodeUserDisabled,
+		},
+		{
+			name:           "revoked session stays unauthorized without the ban code",
+			err:            service.ErrLoginSessionRevoked,
+			expectedStatus: http.StatusUnauthorized,
+			expectedCode:   "AUTH_SESSION_REVOKED",
+		},
 	}
 
 	for _, test := range tests {

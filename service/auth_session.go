@@ -28,6 +28,12 @@ var (
 	ErrLoginSessionMismatch = errors.New("login session does not match the expected session")
 	ErrRefreshTokenInvalid  = errors.New("refresh token is invalid")
 	ErrRefreshRace          = errors.New("refresh token was already rotated")
+	// ErrUserAccountDisabled reports that the account behind an otherwise
+	// valid credential is disabled. Disabling an account revokes its sessions,
+	// so the client would otherwise only learn that the session vanished and
+	// would send the user back to the sign-in form instead of the page that
+	// explains the account state.
+	ErrUserAccountDisabled = model.ErrUserAccountDisabled
 )
 
 type LoginSessionView struct {
@@ -131,22 +137,47 @@ func ValidateLoginSession(identity AuthIdentity) (*model.UserSession, *model.Use
 	session, err := model.GetUserSessionCached(identity.SessionID)
 	if err != nil {
 		if errors.Is(err, model.ErrUserSessionInactive) {
-			return nil, nil, ErrLoginSessionRevoked
+			return nil, nil, revokedSessionOrDisabledAccount(identity.UserID)
 		}
 		return nil, nil, err
 	}
 	now := time.Now().Unix()
 	if session.UserID != identity.UserID || session.Status != model.UserSessionStatusActive || session.RevokedAt != 0 || session.ExpiresAt <= now || session.Version != identity.SessionVersion || session.UserAuthVersion != identity.UserAuthVersion {
-		return nil, nil, ErrLoginSessionRevoked
+		return nil, nil, revokedSessionOrDisabledAccount(identity.UserID)
 	}
 	user, err := model.GetUserCache(identity.UserID)
 	if err != nil {
 		return nil, nil, err
 	}
-	if user.Status != common.UserStatusEnabled || user.AuthVersion != identity.UserAuthVersion {
+	if user.Status != common.UserStatusEnabled {
+		return nil, nil, ErrUserAccountDisabled
+	}
+	if user.AuthVersion != identity.UserAuthVersion {
 		return nil, nil, ErrLoginSessionRevoked
 	}
 	return session, user, nil
+}
+
+// revokedSessionOrDisabledAccount tells a ban apart from an ordinary session
+// revocation. Disabling an account revokes its sessions, so without this the
+// client only learns that a session vanished and sends the user back to the
+// sign-in form instead of the page that explains the account state.
+func revokedSessionOrDisabledAccount(userID int) error {
+	user, err := model.GetUserCache(userID)
+	if err == nil && user.Status != common.UserStatusEnabled {
+		return ErrUserAccountDisabled
+	}
+	return ErrLoginSessionRevoked
+}
+
+// sessionOwnerID returns the owner of a session id, including sessions that
+// are already revoked, so a ban can still be reported after the revocation.
+func sessionOwnerID(sid string) int {
+	session, err := model.GetUserSessionBySID(sid)
+	if err != nil {
+		return 0
+	}
+	return session.UserID
 }
 
 // ValidateSessionReference validates a server-side flow bound to an existing
@@ -225,12 +256,12 @@ func RefreshLoginSession(rawRefreshToken, expectedSID, ip, userAgent string) (*A
 	session, err := model.GetUserSessionCached(sid)
 	if err != nil {
 		if errors.Is(err, model.ErrUserSessionInactive) {
-			return nil, nil, ErrLoginSessionRevoked
+			return nil, nil, revokedSessionOrDisabledAccount(sessionOwnerID(sid))
 		}
 		return nil, nil, ErrRefreshTokenInvalid
 	}
 	if session.Status != model.UserSessionStatusActive || session.RevokedAt != 0 || session.ExpiresAt <= time.Now().Unix() {
-		return nil, nil, ErrLoginSessionRevoked
+		return nil, nil, revokedSessionOrDisabledAccount(session.UserID)
 	}
 	userCache, err := model.GetUserCache(session.UserID)
 	if err != nil {
@@ -240,8 +271,11 @@ func RefreshLoginSession(rawRefreshToken, expectedSID, ip, userAgent string) (*A
 	if err != nil {
 		return nil, nil, err
 	}
-	if userCache.Status != common.UserStatusEnabled || userCache.AuthVersion != session.UserAuthVersion ||
-		currentUser.Status != common.UserStatusEnabled || currentUser.AuthVersion != session.UserAuthVersion {
+	if userCache.Status != common.UserStatusEnabled || currentUser.Status != common.UserStatusEnabled {
+		_, _ = model.RevokeUserSession(session.UserID, session.SID, "user_security_changed")
+		return nil, nil, ErrUserAccountDisabled
+	}
+	if userCache.AuthVersion != session.UserAuthVersion || currentUser.AuthVersion != session.UserAuthVersion {
 		_, _ = model.RevokeUserSession(session.UserID, session.SID, "user_security_changed")
 		return nil, nil, ErrLoginSessionRevoked
 	}
@@ -455,6 +489,8 @@ func authSessionErrorCode(err error) (int, string) {
 		return http.StatusConflict, "AUTH_REFRESH_RACE"
 	case errors.Is(err, ErrAuthTokenExpired):
 		return http.StatusUnauthorized, "AUTH_TOKEN_EXPIRED"
+	case errors.Is(err, ErrUserAccountDisabled):
+		return http.StatusForbidden, common.AuthErrorCodeUserDisabled
 	case errors.Is(err, ErrLoginSessionRevoked):
 		return http.StatusUnauthorized, "AUTH_SESSION_REVOKED"
 	case errors.Is(err, ErrRefreshTokenInvalid), errors.Is(err, ErrAuthTokenInvalid):

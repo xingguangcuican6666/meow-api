@@ -20,6 +20,10 @@ import axios, { type AxiosRequestConfig } from 'axios'
 import { t } from 'i18next'
 
 import {
+  hasAccountDisabledCode,
+  redirectToAccountSuspended,
+} from '@/features/auth/lib/banned-account'
+import {
   applyAuthRotation,
   clearAuthentication,
   getFreshAuthHeaders,
@@ -96,7 +100,16 @@ api.interceptors.response.use(
     const skipErrorHandler = config?.skipErrorHandler
     const status = error?.response?.status
 
-    if (status === 401) {
+    if (hasAccountDisabledCode(error)) {
+      // A ban is a verdict about the account, not about this request. The
+      // credential behind it is unusable, so it must neither be refreshed nor
+      // replayed: explain the account state on its own page instead.
+      clearAuthentication(false)
+      if (!skipErrorHandler) {
+        handleServerError(error)
+      }
+      redirectToAccountSuspended()
+    } else if (status === 401) {
       if (config && !config.skipAuthRefresh && !config.authRetry) {
         config.authRetry = true
         const outcome = await refreshAuthentication()
@@ -111,7 +124,18 @@ api.interceptors.response.use(
           return api.request(config)
         }
 
-        if (outcome.kind === 'anonymous' || outcome.kind === 'out_of_sync') {
+        // Disabling an account revokes its sessions, so the refresh reports a
+        // ban where an ordinary expiry would report an anonymous outcome.
+        if (outcome.kind === 'account_disabled') {
+          if (!skipErrorHandler) {
+            handleServerError({
+              message: t('Your account has been suspend!'),
+              [safeServerErrorMessage]: true,
+              cause: error,
+            })
+          }
+          redirectToAccountSuspended()
+        } else if (outcome.kind === 'anonymous' || outcome.kind === 'out_of_sync') {
           if (!skipErrorHandler) {
             handleServerError({
               message: t('Session expired!'),

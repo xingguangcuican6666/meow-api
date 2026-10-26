@@ -356,6 +356,34 @@ func TestValidateAndFillRejectsPasswordlessUser(t *testing.T) {
 	assert.Empty(t, stored.Password)
 }
 
+// A disabled account is only reported after the password proved ownership:
+// the same login with a wrong password keeps returning the generic
+// invalid-credentials error, so the endpoint never doubles as an
+// account-existence or account-status oracle.
+func TestValidateAndFillDistinguishesDisabledAccountFromWrongPassword(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	hash, err := common.Password2Hash("CorrectPassword123")
+	require.NoError(t, err)
+	require.NoError(t, DB.Create(&User{
+		Username: "disabled-login-user",
+		Password: hash,
+		Status:   common.UserStatusDisabled,
+	}).Error)
+
+	wrongPassword := User{Username: "disabled-login-user", Password: "WrongPassword123"}
+	require.ErrorIs(t, wrongPassword.ValidateAndFill(), ErrInvalidCredentials)
+
+	correctPassword := User{Username: "disabled-login-user", Password: "CorrectPassword123"}
+	require.ErrorIs(t, correctPassword.ValidateAndFill(), ErrUserAccountDisabled)
+
+	// An enabled account with the same credentials still signs in.
+	require.NoError(t, DB.Model(&User{}).Where("username = ?", "disabled-login-user").Update("status", common.UserStatusEnabled).Error)
+	enabledLogin := User{Username: "disabled-login-user", Password: "CorrectPassword123"}
+	require.NoError(t, enabledLogin.ValidateAndFill())
+	assert.Equal(t, "disabled-login-user", enabledLogin.Username)
+}
+
 func TestResetUserPasswordByEmailRequiresSingleActiveMatch(t *testing.T) {
 	setupUserUpdateTestState(t)
 

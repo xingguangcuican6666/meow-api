@@ -22,6 +22,7 @@ import { useEffect } from 'react'
 
 import { wechatLoginByCode } from '@/features/auth/api'
 import { sanitizeAuthRedirect } from '@/features/auth/lib/auth-redirect'
+import { redirectToAccountSuspendedIfBanned } from '@/features/auth/lib/banned-account'
 import { applyAuthBundle, isAuthBundle } from '@/lib/api'
 import { handleServerError } from '@/lib/handle-server-error'
 import { AuthOperationError } from '@/lib/secure-verification'
@@ -53,6 +54,7 @@ function OAuthComponent() {
         }
         handleServerError(new AuthOperationError(i18next.t('OAuth failed')))
       } catch (error: unknown) {
+        if (redirectToAccountSuspendedIfBanned(error)) return
         handleServerError(
           AuthOperationError.from(error, i18next.t('OAuth failed'))
         )

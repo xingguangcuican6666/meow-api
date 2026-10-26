@@ -50,7 +50,10 @@ func StartLoginVerification(user *model.User, loginMethod string, migration *Leg
 	if err != nil {
 		return nil, err
 	}
-	if state.Status != common.UserStatusEnabled || state.AuthVersion != user.AuthVersion {
+	if state.Status != common.UserStatusEnabled {
+		return nil, model.ErrUserAccountDisabled
+	}
+	if state.AuthVersion != user.AuthVersion {
 		return nil, model.ErrUserSessionInactive
 	}
 	methods, err := securityVerificationPolicy(VerificationScopeLogin, *state)
@@ -101,7 +104,10 @@ func RequireLoginVerification(token, method string) (*LoginVerification, error) 
 	if err != nil {
 		return nil, err
 	}
-	if state.Status != common.UserStatusEnabled || state.AuthVersion != payload.AuthVersion {
+	if state.Status != common.UserStatusEnabled {
+		return nil, model.ErrUserAccountDisabled
+	}
+	if state.AuthVersion != payload.AuthVersion {
 		return nil, model.ErrUserSessionInactive
 	}
 	if err := requireLoginVerificationMethod(state, method); err != nil {

@@ -45,6 +45,7 @@ import { OAuthProviders } from '@/features/auth/components/oauth-providers'
 import { loginFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
+import { redirectToAccountSuspendedIfBanned } from '@/features/auth/lib/banned-account'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/features/auth/passkey'
 import {
   requestPasskeyAssertion,
@@ -188,9 +189,11 @@ export function UserAuthForm({
           toast.success(t('Welcome back!'))
         }
       } else {
+        if (redirectToAccountSuspendedIfBanned(res)) return
         handleServerError(createServerError(res, loginFailedMessage))
       }
     } catch (error: unknown) {
+      if (redirectToAccountSuspendedIfBanned(error)) return
       handleServerError(AuthOperationError.from(error, loginFailedMessage))
     } finally {
       setIsLoading(false)
@@ -229,9 +232,11 @@ export function UserAuthForm({
           toast.success(t('Signed in via WeChat'))
         }
       } else {
+        if (redirectToAccountSuspendedIfBanned(res)) return
         handleServerError(createServerError(res, loginFailedMessage))
       }
     } catch (error: unknown) {
+      if (redirectToAccountSuspendedIfBanned(error)) return
       handleServerError(
         new AuthOperationError(loginFailedMessage, undefined, { cause: error })
       )
@@ -284,6 +289,8 @@ export function UserAuthForm({
       if (controller.signal.aborted) return
       if (error instanceof DOMException && error.name === 'NotAllowedError') {
         toast.info(t('Passkey login was cancelled or timed out'))
+      } else if (redirectToAccountSuspendedIfBanned(error)) {
+        // The page explains the account state; no toast should compete with it.
       } else if (error instanceof Error) {
         handleServerError(AuthOperationError.from(error))
       } else {

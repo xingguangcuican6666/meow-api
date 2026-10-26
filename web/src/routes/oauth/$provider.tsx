@@ -34,6 +34,7 @@ import {
 } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { sanitizeAuthRedirect } from '@/features/auth/lib/auth-redirect'
+import { redirectToAccountSuspendedIfBanned } from '@/features/auth/lib/banned-account'
 import {
   parseTelegramBindCallback,
   postTelegramBindResult,
@@ -239,6 +240,7 @@ function OAuthCallback() {
           return
         }
         const messageKey = getServerErrorMessageKey(response.data)
+        if (redirectToAccountSuspendedIfBanned(response.data)) return
         handleServerError(
           response.data,
           messageKey
@@ -247,6 +249,7 @@ function OAuthCallback() {
         )
       } catch (error: unknown) {
         if (!active) return
+        if (redirectToAccountSuspendedIfBanned(error)) return
         handleServerError(
           AuthOperationError.from(error, i18next.t('OAuth failed'))
         )
