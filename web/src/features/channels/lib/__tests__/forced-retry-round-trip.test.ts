@@ -19,6 +19,7 @@ import { describe, expect, test } from 'vitest'
 import type { Channel } from '../../types'
 import {
   CHANNEL_FORM_DEFAULT_VALUES,
+  channelFormSchema,
   transformChannelToFormDefaults,
   transformFormDataToUpdatePayload,
 } from '../channel-form'
@@ -130,5 +131,30 @@ describe('channel forced retry rules round trip', () => {
     expect(saved.automatic_retry_override_enabled).toBeUndefined()
     expect(saved.automatic_retry_status_codes).toBeUndefined()
     expect(saved.automatic_retry_keywords).toBeUndefined()
+  })
+})
+
+describe('channel forced retry status code validation', () => {
+  test('invalid status codes fail validation with a field error instead of being saved silently', () => {
+    const parsed = channelFormSchema.safeParse(
+      forcedRetryForm({ automatic_retry_status_codes: '999,abc' })
+    )
+
+    expect(parsed.success).toBe(false)
+    if (!parsed.success) {
+      expect(
+        parsed.error.issues.some(
+          (issue) => issue.path[0] === 'automatic_retry_status_codes'
+        )
+      ).toBe(true)
+    }
+  })
+
+  test('a valid code list passes', () => {
+    const parsed = channelFormSchema.safeParse(
+      forcedRetryForm({ automatic_retry_status_codes: '200,500-503' })
+    )
+
+    expect(parsed.success).toBe(true)
   })
 })

@@ -29,7 +29,7 @@ import {
   getFreshAuthHeaders,
   refreshAuthentication,
 } from '@/lib/auth-session'
-import { handleServerError } from '@/lib/handle-server-error'
+import { handleServerError, markServerErrorHandled } from '@/lib/handle-server-error'
 import {
   getServerErrorMessage,
   safeServerErrorMessage,
@@ -103,9 +103,12 @@ api.interceptors.response.use(
     if (hasAccountDisabledCode(error)) {
       // A ban is a verdict about the account, not about this request. The
       // credential behind it is unusable, so it must neither be refreshed nor
-      // replayed: the account-state page explains the verdict itself, and no
-      // toast should compete with it.
+      // replayed: the account-state page explains the verdict itself. Mark the
+      // failure as presented so the query and mutation caches, which see the
+      // same error a moment later, do not raise a competing toast while the
+      // navigation is in flight.
       clearAuthentication(false)
+      markServerErrorHandled(error)
       redirectToAccountSuspended()
     } else if (status === 401) {
       if (config && !config.skipAuthRefresh && !config.authRetry) {
@@ -126,8 +129,12 @@ api.interceptors.response.use(
         // ban where an ordinary expiry would report an anonymous outcome.
         // The account-state page states the verdict; no toast for it.
         if (outcome.kind === 'account_disabled') {
+          markServerErrorHandled(error)
           redirectToAccountSuspended()
-        } else if (outcome.kind === 'anonymous' || outcome.kind === 'out_of_sync') {
+        } else if (
+          outcome.kind === 'anonymous' ||
+          outcome.kind === 'out_of_sync'
+        ) {
           if (!skipErrorHandler) {
             handleServerError({
               message: t('Session expired!'),
