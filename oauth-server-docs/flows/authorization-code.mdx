@@ -3,6 +3,26 @@ title: "授权码流程"
 description: "含用户同意环节的端到端授权码 + PKCE 时序"
 ---
 
+<!--
+Copyright (C) 2023-2026 xingguangcuican6666
+
+This file is part of new-api, which is licensed under the GNU Affero General
+Public License v3.0. Original project: https://github.com/QuantumNous/new-api
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+
 New API 只支持 **Authorization Code** 授权类型（`response_type=code`），可叠加 PKCE。本页说明从发起授权到拿到令牌的完整时序，包括 New API 内部的用户同意环节。
 
 ## 时序总览

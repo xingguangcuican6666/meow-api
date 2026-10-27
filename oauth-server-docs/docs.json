@@ -74,5 +74,10 @@
     "socials": {
       "github": "https://github.com/QuantumNous/new-api"
     }
+  },
+  "seo": {
+    "metatags": {
+      "copyright": "Copyright (C) 2023-2026 xingguangcuican6666. This documentation is part of new-api, licensed under the GNU Affero General Public License v3.0. Original project: https://github.com/QuantumNous/new-api"
+    }
   }
 }

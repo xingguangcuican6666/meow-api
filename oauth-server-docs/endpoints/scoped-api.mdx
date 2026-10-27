@@ -3,6 +3,26 @@ title: "业务 API（访问令牌直连）"
 description: "用 at_ 访问令牌按 scope 直接调用钱包、API 密钥、模型目录与模型推理"
 ---
 
+<!--
+Copyright (C) 2023-2026 xingguangcuican6666
+
+This file is part of new-api, which is licensed under the GNU Affero General
+Public License v3.0. Original project: https://github.com/QuantumNous/new-api
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+-->
+
 访问令牌（`at_` 前缀）是**一等业务凭据**：用户授予的 scope 直接授权对应的业务能力，无需再换取中继 API Key。除身份信息端点 [`/oauth2/userinfo`](/endpoints/userinfo) 外，业务能力分为两类：
 
 - **`/oauth2/api/*`** — 钱包、API 密钥、模型目录的管理接口，返回**面板封装** `{success, message, data}`（复用后台同名处理器，以令牌所属用户身份运行）。

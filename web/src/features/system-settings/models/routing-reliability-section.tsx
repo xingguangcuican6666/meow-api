@@ -15,6 +15,9 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
+
+Modified in this fork by xingguangcuican6666.
+Modifications Copyright (C) 2023-2026 xingguangcuican6666
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMemo, useRef } from 'react'

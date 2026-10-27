@@ -15,7 +15,11 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
+
+Modified in this fork by xingguangcuican6666.
+Modifications Copyright (C) 2023-2026 xingguangcuican6666
 */
+
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
