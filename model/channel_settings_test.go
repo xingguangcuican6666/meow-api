@@ -239,3 +239,25 @@ func TestInferencePresetSettingsAndDatabaseRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+// Forced retry status codes are re-parsed on every relay attempt, where an
+// unparseable list silently disables the rule; the save must fail instead.
+func TestChannelValidateSettingsValidatesForcedRetryStatusCodes(t *testing.T) {
+	channel := &Channel{}
+	channel.SetOtherSettings(dto.ChannelOtherSettings{
+		AutomaticRetryOverrideEnabled: true,
+		AutomaticRetryStatusCodes:     "999,abc",
+		AutomaticRetryKeywords:        "no available upstream",
+	})
+
+	err := channel.ValidateSettings()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced retry status codes")
+
+	channel.SetOtherSettings(dto.ChannelOtherSettings{
+		AutomaticRetryOverrideEnabled: true,
+		AutomaticRetryStatusCodes:     "200,500-503",
+		AutomaticRetryKeywords:        "no available upstream",
+	})
+	require.NoError(t, channel.ValidateSettings())
+}

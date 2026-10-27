@@ -159,3 +159,68 @@ func TestShouldRuntimeDisableChannelGlobalRulesDoNotDisableUnmatchedChannelError
 
 	assert.False(t, ShouldRuntimeDisableChannel(unmatched, nil))
 }
+
+// The forced retry rule is the operator's own escape hatch: it must be able to
+// retry an upstream reply that arrives as 200 but carries an error in the body,
+// which is what the distributor's "no available upstream" replies look like.
+func TestShouldRetryChannelErrorForcedRetryRules(t *testing.T) {
+	enabled := dto.ChannelOtherSettings{
+		AutomaticRetryOverrideEnabled: true,
+		AutomaticRetryStatusCodes:     "200",
+		AutomaticRetryKeywords:        "no available upstream",
+	}
+	disabled := dto.ChannelOtherSettings{
+		AutomaticRetryStatusCodes: "200",
+		AutomaticRetryKeywords:    "no available upstream",
+	}
+
+	tests := []struct {
+		name     string
+		settings *dto.ChannelOtherSettings
+		err      *types.NewAPIError
+		want     bool
+	}{
+		{
+			name:     "matching code and keyword retries",
+			settings: &enabled,
+			err:      types.NewOpenAIError(errors.New(`{"error":{"message":"no available upstream"}}`), types.ErrorCodeBadResponseStatusCode, http.StatusOK),
+			want:     true,
+		},
+		{
+			name:     "keyword is matched case-insensitively",
+			settings: &enabled,
+			err:      types.NewOpenAIError(errors.New("No Available Upstream for model"), types.ErrorCodeBadResponseStatusCode, http.StatusOK),
+			want:     true,
+		},
+		{
+			name:     "matching code without the keyword does not retry",
+			settings: &enabled,
+			err:      types.NewOpenAIError(errors.New("rate limited"), types.ErrorCodeBadResponseStatusCode, http.StatusOK),
+			want:     false,
+		},
+		{
+			name:     "matching keyword on another status does not retry",
+			settings: &enabled,
+			err:      types.NewOpenAIError(errors.New("no available upstream"), types.ErrorCodeBadResponseStatusCode, http.StatusServiceUnavailable),
+			want:     false,
+		},
+		{
+			name:     "override switch off keeps the rule inert",
+			settings: &disabled,
+			err:      types.NewOpenAIError(errors.New("no available upstream"), types.ErrorCodeBadResponseStatusCode, http.StatusOK),
+			want:     false,
+		},
+		{
+			name:     "no settings never retries",
+			settings: nil,
+			err:      types.NewOpenAIError(errors.New("no available upstream"), types.ErrorCodeBadResponseStatusCode, http.StatusOK),
+			want:     false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, ShouldRetryChannelError(test.err, test.settings))
+		})
+	}
+}

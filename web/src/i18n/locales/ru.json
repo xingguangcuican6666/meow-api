@@ -7144,7 +7144,18 @@
     "Account status": "Статус учётной записи",
     "Your account has been suspend!": "Ваша учётная запись приостановлена!",
     "Sign in with another account": "Войти под другой учётной записью",
-    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "Ваши существующие сессии и API-ключи отозваны, и эта учётная запись больше не может отправлять запросы.",
-    "If you believe this is a mistake, contact the administrator of this site.": "Если вы считаете, что это ошибка, обратитесь к администратору этого сайта."
+    "Your access has been suspended by an administrator. All login sessions and API keys for this account were revoked, and it can no longer sign in or place requests.": "Администратор приостановил ваш доступ. Все сессии и API-ключи этой учётной записи отозваны; войти и отправлять запросы больше нельзя.",
+    "Why you see this page": "Почему вы видите эту страницу",
+    "Account disabled": "Учётная запись отключена",
+    "An administrator set this account to disabled, so authentication is refused on every path.": "Администратор отключил эту учётную запись, поэтому аутентификация отклоняется на всех путях.",
+    "Sessions and keys revoked": "Сессии и ключи отозваны",
+    "Login sessions, access tokens and API keys belonging to this account stopped working at the moment it was disabled.": "Сессии входа, токены доступа и API-ключи этой учётной записи перестали работать в момент её отключения.",
+    "Restoration needed": "Требуется восстановление",
+    "Only an administrator can re-enable the account. Retrying the sign-in form will keep failing until that happens.": "Включить учётную запись может только администратор. До этого повторные попытки входа будут завершаться ошибкой.",
+    "What you can do:": "Что можно сделать:",
+    "Contact your administrator": "Связаться с администратором",
+    "Ask the administrator of this site why the account was disabled and what is needed to restore it.": "Уточните у администратора этого сайта причину отключения и условия восстановления учётной записи.",
+    "Return to the site homepage.": "Вернуться на главную страницу сайта.",
+    "Forced retry status codes must be valid HTTP codes": "Коды статуса принудительной повторной попытки должны быть допустимыми кодами HTTP"
   }
 }

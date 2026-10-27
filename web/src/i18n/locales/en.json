@@ -7144,7 +7144,18 @@
     "Account status": "Account status",
     "Your account has been suspend!": "Your account has been suspend!",
     "Sign in with another account": "Sign in with another account",
-    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "Your existing sessions and API keys have been revoked, and this account can no longer place requests.",
-    "If you believe this is a mistake, contact the administrator of this site.": "If you believe this is a mistake, contact the administrator of this site."
+    "Your access has been suspended by an administrator. All login sessions and API keys for this account were revoked, and it can no longer sign in or place requests.": "Your access has been suspended by an administrator. All login sessions and API keys for this account were revoked, and it can no longer sign in or place requests.",
+    "Why you see this page": "Why you see this page",
+    "Account disabled": "Account disabled",
+    "An administrator set this account to disabled, so authentication is refused on every path.": "An administrator set this account to disabled, so authentication is refused on every path.",
+    "Sessions and keys revoked": "Sessions and keys revoked",
+    "Login sessions, access tokens and API keys belonging to this account stopped working at the moment it was disabled.": "Login sessions, access tokens and API keys belonging to this account stopped working at the moment it was disabled.",
+    "Restoration needed": "Restoration needed",
+    "Only an administrator can re-enable the account. Retrying the sign-in form will keep failing until that happens.": "Only an administrator can re-enable the account. Retrying the sign-in form will keep failing until that happens.",
+    "What you can do:": "What you can do:",
+    "Contact your administrator": "Contact your administrator",
+    "Ask the administrator of this site why the account was disabled and what is needed to restore it.": "Ask the administrator of this site why the account was disabled and what is needed to restore it.",
+    "Return to the site homepage.": "Return to the site homepage.",
+    "Forced retry status codes must be valid HTTP codes": "Forced retry status codes must be valid HTTP codes"
   }
 }

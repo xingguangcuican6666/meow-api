@@ -7144,7 +7144,18 @@
     "Account status": "アカウントの状態",
     "Your account has been suspend!": "あなたのアカウントは停止されました！",
     "Sign in with another account": "別のアカウントでサインイン",
-    "Your existing sessions and API keys have been revoked, and this account can no longer place requests.": "既存のセッションと API キーは失効済みのため、このアカウントではリクエストを送信できません。",
-    "If you believe this is a mistake, contact the administrator of this site.": "誤りだと思われる場合は、サイトの管理者にお問い合わせください。"
+    "Your access has been suspended by an administrator. All login sessions and API keys for this account were revoked, and it can no longer sign in or place requests.": "管理者によりアカウントが停止されました。このアカウントのログインセッションと API キーはすべて失効しており、サインインやリクエストはできません。",
+    "Why you see this page": "このページが表示される理由",
+    "Account disabled": "アカウントが無効化されています",
+    "An administrator set this account to disabled, so authentication is refused on every path.": "管理者がこのアカウントを無効にしたため、すべての経路で認証が拒否されます。",
+    "Sessions and keys revoked": "セッションとキーは失効済み",
+    "Login sessions, access tokens and API keys belonging to this account stopped working at the moment it was disabled.": "アカウントが無効化された時点で、ログインセッション、アクセストークン、API キーはすべて利用できなくなりました。",
+    "Restoration needed": "管理者による復旧が必要です",
+    "Only an administrator can re-enable the account. Retrying the sign-in form will keep failing until that happens.": "アカウントを再有効化できるのは管理者のみです。それまではサインインを再試行しても失敗し続けます。",
+    "What you can do:": "できること：",
+    "Contact your administrator": "管理者に連絡する",
+    "Ask the administrator of this site why the account was disabled and what is needed to restore it.": "アカウントが無効化された理由と復旧に必要な条件を、このサイトの管理者にご確認ください。",
+    "Return to the site homepage.": "サイトのホームに戻る。",
+    "Forced retry status codes must be valid HTTP codes": "強制リトライのステータスコードは有効な HTTP ステータスコードである必要があります"
   }
 }

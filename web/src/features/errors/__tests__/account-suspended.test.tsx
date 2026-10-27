@@ -73,6 +73,38 @@ describe('account-suspended page', () => {
   it('is a page landmark so assistive technology can jump to the verdict', async () => {
     const view = await renderPage()
     expect(view.container.querySelector('main')).not.toBeNull()
+    expect(view.container.querySelector('header')).not.toBeNull()
+  })
+
+  it('explains that the credentials were revoked and only an administrator can restore them', async () => {
+    const view = await renderPage()
+
+    expect(
+      screen.getByText(
+        'Your access has been suspended by an administrator. All login sessions and API keys for this account were revoked, and it can no longer sign in or place requests.'
+      )
+    ).toBeVisible()
+
+    const reasons = view.container.querySelector('ol')
+    expect(reasons).not.toBeNull()
+    expect(reasons).toHaveTextContent(
+      'An administrator set this account to disabled, so authentication is refused on every path.'
+    )
+    expect(reasons).toHaveTextContent(
+      'Login sessions, access tokens and API keys belonging to this account stopped working at the moment it was disabled.'
+    )
+    expect(reasons).toHaveTextContent(
+      'Only an administrator can re-enable the account. Retrying the sign-in form will keep failing until that happens.'
+    )
+  })
+
+  it('lists what the visitor can do', async () => {
+    await renderPage()
+
+    expect(
+      screen.getByRole('heading', { name: 'What you can do:' })
+    ).toBeVisible()
+    expect(screen.getByText('Contact your administrator')).toBeVisible()
   })
 
   it('offers a way to another account and a way back home', async () => {
@@ -83,23 +115,16 @@ describe('account-suspended page', () => {
     })
     expect(anotherAccount).toHaveAttribute('href', '/sign-in')
 
-    const home = screen.getByRole('button', { name: 'Back to Home' })
+    const home = screen.getByRole('link', { name: /Back to Home/ })
     expect(home).toHaveAttribute('href', '/')
   })
 
-  it('explains that the existing sessions and API keys were revoked', async () => {
+  it('does not offer a retry of the refused sign-in', async () => {
     await renderPage()
 
-    expect(
-      screen.getByText(
-        'Your existing sessions and API keys have been revoked, and this account can no longer place requests.'
-      )
-    ).toBeVisible()
-  })
-
-  it('points to the administrator when the ban looks like a mistake', async () => {
-    await renderPage()
-
-    expect(screen.getByText(/administrator of this site/)).toBeVisible()
+    // Retrying the same account cannot succeed, so the page must not invite the
+    // visitor into a loop — only the other-account and home paths.
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByLabelText(/Password/)).toBeNull()
   })
 })

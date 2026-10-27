@@ -1080,6 +1080,14 @@ func (channel *Channel) ValidateSettings() error {
 			return fmt.Errorf("invalid runtime automatic disable status codes: %w", err)
 		}
 	}
+	// Forced retry rules are parsed again on every relay attempt, and an
+	// unparseable list there silently disables the rule instead of failing the
+	// request. Reject it here so the save reports the real reason.
+	if channelOtherSettings.AutomaticRetryOverrideEnabled {
+		if _, err := operation_setting.ParseHTTPStatusCodeRanges(channelOtherSettings.AutomaticRetryStatusCodes); err != nil {
+			return fmt.Errorf("invalid forced retry status codes: %w", err)
+		}
+	}
 	if err := channelOtherSettings.BillingQuery.Validate(); err != nil {
 		return err
 	}
